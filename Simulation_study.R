@@ -1,5 +1,11 @@
 ####### V0 Simulation study
 
+## Next steps:
+#	Find suitable data generation mechanism
+#	Check best imputation methods for mice
+# Calculate o:e ratio in simulation study
+# When to perform o:e ratio
+
 ######################################
 ### Install and load required packages
 ######################################
@@ -7,7 +13,9 @@
 ## Specify required packages
 packages = c("mice", 
              "lattice", 
-             "metamisc"
+             "metamisc",
+             "dplyr",
+             "ggplot2"
              )
 
 # Install&load packages or load packages, if already installed
@@ -84,29 +92,35 @@ mymech = c("MAR")
 # Choose weights of weighted sum scores
 #myweights = 
 
-# Create a new dataframe which amputes values replacing it by NA
-amputation_df = ampute(data = df_complete, 
+# Carry out amputation replacing it by NA
+amputation = ampute(data = df_complete, 
                        prop = myprop,
-                       bycases = FALSE
                        #freq = myfreq,
                        #mech = mymech
                        #weights = myweights
                        )
 
-df_ammmmp = as.data.frame(amputation_df, row.names = NULL, optional = FALSE)
-
 # Show that amputation has worked
-head(amputation_df$amp)
-summary(amputation_df)
+head(amputation$amp)
+summary(amputation)
 
 # Visualization of missing data pattern
-md.pattern(amputation_df$amp)
+md.pattern(amputation$amp)
+
+# Evaluation of amputation: 
+bwplot(amputation, which.pat = c(1, 3), descriptives = TRUE)
+
+# Evaluation of amputation:
+xyplot(amputation, which.pat = 1)
+
+# save new data including amputations (NA) to data frame
+df_amputed = amputation$amp
 
 # Create multiple logistic regression model based on amputed data
 model_amputed = glm(outcome_var ~ discrete_var + continuous_var_1 + continuous_var_2, 
-                    data = amputed_df, 
+                    data = df_amputed, 
                     family = binomial
-                    )
+)
 summary(model_amputed)$coef
 
 ######################################
@@ -114,46 +128,53 @@ summary(model_amputed)$coef
 ######################################
 
 # Choose number of imputed data sets (reasonably between 5 and 10)
-imp_amoung = c(5)
+imp_amount = c(5)
 
 # Choose imputation method
 # Note: Look for better imputation method (listed via methods(mice))
 imp_method = c("pmm")
 
 # Impute data via mice
-imp_df = mice(amputation_df, 
-              m = imp_amount, 
-              method = imp_method
+imputation = mice(data = df_amputed, 
+              maxit = imp_amount, 
+              method = imp_method, 
+              print = TRUE
               )
 
+# Inspect the imputed data sets
+# Note: Save to dataframe for each iteration
+#for(i in 1:imp_amount) {
+#  complete(imputation, i)
+#}  
+
+df_imp_1 = complete(imputation,1)
+df_imp_2 = complete(imputation,2)
+df_imp_3 = complete(imputation,3)
+df_imp_4 = complete(imputation,4)
+df_imp_5 = complete(imputation,5)
+
 ######################################
-## Perform transformation on O:E ratio
+## View performance measures of imputed data sets
 ######################################
 
-## Define parameters
-#n = 
-#n.events = 
-#e.events = 
-#df = 
-#
+######################################
+## Calculate O:E ratio and its transformations
+######################################
+
 ## Calculate total O:E ratio & its standard error
-#oe <- oecalc(O = n.events, E = e.events, N = n, data = df)
-#
+oe <- oecalc(O = df_imp_1$outcome_var, E = df_complete$outcome_var, N = 1000, data = df_imp_1)
+
 ## Display result of O:E ratio
-#oe
-#
-## Display total result in forest plot
-#plot(oe)
-#
-## Calculate log O:E ratio & its standard error
-#log_oe <- oecalc(O = n.events, E = e.events, N = n, data = df, g = "log(OE)")
-#log_oe
-#
-## Display result in forest plot
-#plot(log_oe)
+oe
+
+## Calculate log(O:E) ratio & its standard error
+log_oe <- oecalc(O = df_imp_1$outcome_var, E = df_complete$outcome_var, N = 1000, data = df_imp_1, g = "log(OE)")
+
+## Display result of log(O:E) ratio
+log_oe
 
 ######################################
-## View performance measures
+## Pooling procedure
 ######################################
 
 ######################################
