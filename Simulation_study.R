@@ -1,17 +1,5 @@
 ####### V0 Simulation study
 
-## Next steps:
-
-#	Check best imputation methods for mice
-# Calculate o:e ratio in simulation study with regard to expected
-# When to perform o:e ratio 
-# Loop over simulation 
-#	Data generation mechanism suitable?
-# Too deterministic? Include noise. How? By std dev? By bias?
-# Use predicted class or probability for expected ratio
-# Warum ist meine predicted class immer negativ
-# Zweck von repetitions
-
 ######################################
 ### Install and load required packages
 ######################################
@@ -23,7 +11,8 @@ packages = c("mice",
              "dplyr",
              "ggplot2",
              "tidyverse",
-             "caret"
+             "caret",
+             "MASS"
              )
 
 # Install&load packages or load packages, if already installed
@@ -45,7 +34,6 @@ package.check <- lapply(
 set.seed(18)
 
 ## Define variables, distribution of data and sample size
-# Note: vary sample between n = 500 and n = 1000 later on
 
 # continuous variables could be e.g., blood pressure
 continuous_var_1 = rnorm(n = 1000, mean = 80, sd = 5)
@@ -58,26 +46,24 @@ hist(continuous_var_2)
 
 # Create linear combination 
 # with or without bias as intercept?
-lin_combination = 3*continuous_var_1 + 2*continuous_var_2
+lin_combination = continuous_var_1 + continuous_var_2
 
 # Probability for response variable to be 1
 # Note: Due to application for logistic regression, use invlogit function
-prob_observed_outcome = 1/(exp(-lin_combination))
+#prob_observed_outcome = 1/(exp(-lin_combination))
+prob_observed_outcome = 1/(3+exp(-lin_combination))
 prob_observed_outcome
-
-# binary outcome variable as bernoulli response variable
-# e.g., diabetes positive (1) or negative (0)
-# Desired probability for outcome_var = 1 between 20% and 30% to consider imbalance
-#outcome_var = rbinom(n = 500, size = 1, prob = prob_observed_outcome)
-outcome_var = rbinom(n = 1000, size = 1, prob = 0.2)
-summary(outcome_var)
-hist(outcome_var)
 
 # Add noise
 # tbd
 
-# Visualize relationship in data
-# tbd
+# Binary outcome variable as Bernoulli response variable
+# e.g., diabetes positive (1) or negative (0)
+# Desired probability for outcome_var = 1 between 20% and 30% to consider imbalance
+#outcome_var = rbinom(n = 1000, size = 1, prob = prob_observed_outcome)
+outcome_var = rbinom(n = 1000, size = 1, prob = 0.2)
+summary(outcome_var)
+hist(outcome_var)
 
 # Combine it to a data frame
 df_complete = data.frame( 
@@ -106,6 +92,9 @@ summary(model_complete)$coef
 
 # Predicted outcomes to take as values for expected outcomes in O:E ratio
 prob_expected_outcome <- model_complete %>% predict(test_data, type = "response")
+summary(model_complete$fitted.values)
+
+# normalize
 predicted_classes = ifelse(prob_expected_outcome > 0.5, 1, 0)
 predicted_classes
 
@@ -113,16 +102,14 @@ predicted_classes
 mean(predicted_classes == test_data$outcome_var)
 
 # Value for O:E ratio by comparison of probabilities
-first_try_oe = 0.2 / mean(prob_expected_outcome)
-first_try_oe
+#prob_based_oe = mean(prob_observed_outcome) / mean(prob_expected_outcome)
+prob_based_oe
 
-# Calculate total O:E ratio & its standard error based on complete data and logistic model
-# probability of observed outcomes: probability of df_complete$outcome_var
-# probability of expected outcomes: 
-oe_complete <- oecalc(O = df_complete$outcome_var, 
-             E = , 
-             N = , 
-             data = 
+# Calculate total O:E ratio & its standard error based on complete data
+oe_complete <- oecalc(
+             O = , # numeric vector of observed events
+             E = , # numeric vector of expected events
+             N = 1000
              )
 
 ## Display result of total O:E ratio & its standard error based on complete data and logistic model
@@ -133,28 +120,23 @@ plot(eo_complete)
 ## Ampute data from complete data set
 ######################################
 
-# Choose percentage of missing cells (define reasonably between 0.1 and 0.2)
-myprop = c(0.15)
-
-# Choose missingness pattern
-mypattern = c(1, 1, 1, 1)
-
-# Choose relative occurence of these patterns
-myfreq = c(0.25, 0.25, 0.25, 0.25)
-
-# Choose missingness mechanism (MAR also default in ampute)
-mymech = c("MAR")
-
-# Choose weights of weighted sum scores
-#myweights = 
+# Define parameters for amputation
+myprop = c(0.15) # Choose percentage of missing cells (define reasonably between 0.1 and 0.2)
+mypattern = rbind(c(0, 0, 1), c(1, 0 ,1), c(0, 1, 1)) # Choose missingness pattern (0==missing, 1==non-missing)
+myfreq = c(0.1, 0.45, 0.45) # Choose relative occurence of these patterns
+mymech = c("MAR") # Choose missingness mechanism (MAR based on literature)
+myweights = ampute.default.weights(mypattern, mymech) # Choose weights of weighted sum scores
 
 # Carry out amputation replacing it by NA
+# Note for interpretation: Proportion of missingness in terms of cells not in terms of cases
 amputation = ampute(data = df_complete, 
-                       prop = myprop,
-                       #freq = myfreq,
-                       #mech = mymech
-                       #weights = myweights
-                       )
+                    patterns = mypattern,
+                    prop = myprop, 
+                    freq = myfreq, 
+                    mech = mymech, 
+                    weights = myweights, 
+                    bycases = FALSE
+                    )
 
 # Show that amputation has worked
 head(amputation$amp)
@@ -163,23 +145,22 @@ summary(amputation)
 # Visualization of missing data pattern
 md.pattern(amputation$amp)
 
-# Evaluation of amputation: 
-bwplot(amputation, which.pat = c(1, 3), descriptives = TRUE)
-xyplot(amputation, which.pat = 1)
-
 # save new data including amputations (NA) to data frame
 df_amputed = amputation$amp
 
-# Create multiple logistic regression model based on amputed data
+# Evaluation of amputation
+bwplot(amputation, which.pat = c(1, 3), descriptives = TRUE)
+xyplot(amputation, which.pat = 1)
+
+# check for convergence. Update if full convergence.
+#tbd
+
+# Create multiple logistic regression model based on amputed data for comparison
 model_amputed = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
                     data = df_amputed, 
                     family = binomial
 )
 summary(model_amputed)$coef
-
-# Check performance of imputation
-
-# Visualization to check for convergence. Update if full convergence.
 
 ######################################
 ## Impute data
@@ -188,11 +169,15 @@ summary(model_amputed)$coef
 # Choose number of imputed data sets (reasonably between 5 and 10)
 imp_amount = c(5)
 
+# Outcome variable as categorical variable for imp_method logreg
+df_amputed$outcome_var <- as.factor(df_amputed$outcome_var)
+
 # Choose imputation method
-# Note: Look for better imputation method (listed via methods(mice))
-imp_method = c("pmm")
+# pmm default method for numeric data; logreg method for binary data
+imp_method = c("pmm", "pmm", "logreg") 
 
 # Impute data via mice
+set.seed(18)
 imputation = mice(data = df_amputed, 
               maxit = imp_amount, 
               method = imp_method, 
@@ -200,11 +185,6 @@ imputation = mice(data = df_amputed,
               )
 
 # Inspect the imputed data sets
-# Note: Save to dataframe for each iteration
-#for(i in 1:imp_amount) {
-#  complete(imputation, i)
-#}  
-
 df_imp_1 = complete(imputation,1)
 df_imp_2 = complete(imputation,2)
 df_imp_3 = complete(imputation,3)
@@ -216,24 +196,24 @@ df_imp_5 = complete(imputation,5)
 ## Note: Implement correct O:E ratio, below just testing function
 ######################################
 
-## Calculate total O:E ratio & its standard error based on imputed data
-oe <- oecalc(O = df_complete$outcome_var, 
-             E = df_complete$outcome_var, 
-             N = 1000, 
-             data = df_imp_1
-             )
+# Calculate total O:E ratio & its standard error based on imputed model
+oe_imputed <- oecalc(
+  O = , # numeric vector of observed events
+  E = , # numeric vector of expected events
+  N = 1000
+)
 
 ## Display result of O:E ratio
-oe
+oe_imputed
 plot(eo)
 
 ## Calculate log(O:E) ratio & its standard error based on imputed data
-log_oe <- oecalc(O = df_complete$outcome_var, 
-                 E = df_complete$outcome_var, 
-                 N = 1000, 
-                 data = df_imp_1, 
-                 g = "log(OE)"
-                 )
+log_oe <- oecalc(
+  O = , # numeric vector of observed events
+  E = , # numeric vector of expected events
+  N = 1000,
+  g = "log(OE)"
+)
 
 ## Display result of log(O:E) ratio
 log_oe
@@ -249,6 +229,10 @@ plot(log_oe)
 
 ######################################
 ## Pooling procedure
+######################################
+
+######################################
+## Evaluate performance of study
 ######################################
 
 ######################################
