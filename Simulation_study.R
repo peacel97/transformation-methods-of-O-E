@@ -1,14 +1,5 @@
 ####### V0 Simulation study
 
-# Threshold predicted class, normalize?
-# Change one continuous variable to binary?
-# External validation
-# Shrinkage
-# Interpretation difference complete data and amputed data too little?
-# Pseudo code for chapter 3
-# loop repetition
-
-
 ######################################
 ### Install and load required packages
 ######################################
