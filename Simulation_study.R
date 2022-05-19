@@ -1,5 +1,13 @@
 ####### V0 Simulation study
 
+# Threshold predicted class, normalize?
+# Change one continuous variable to binary?
+# External validation
+# Shrinkage
+# Interpretation difference complete data and amputed data too little?
+# Pseudo code for chapter 3
+# loop
+
 ######################################
 ### Install and load required packages
 ######################################
@@ -12,7 +20,8 @@ packages = c("mice",
              "ggplot2",
              "tidyverse",
              "caret",
-             "MASS"
+             "MASS",
+             "logit"
              )
 
 # Install&load packages or load packages, if already installed
@@ -36,32 +45,29 @@ set.seed(18)
 ## Define variables, distribution of data and sample size
 
 # continuous variables could be e.g., blood pressure
-continuous_var_1 = rnorm(n = 1000, mean = 80, sd = 5)
+continuous_var_1 = rnorm(n = 1000, mean = 2.0, sd = 0.5)
 summary(continuous_var_1)
 hist(continuous_var_1)
 
-continuous_var_2 = rnorm(n = 1000, mean = 50, sd = 2)
+continuous_var_2 = rnorm(n = 1000, mean = 1.5, sd = 0.25)
 summary(continuous_var_2)
 hist(continuous_var_2)
 
 # Create linear combination 
 # with or without bias as intercept?
-lin_combination = continuous_var_1 + continuous_var_2
+lin_combination = -4.5 + continuous_var_1 + continuous_var_2
 
 # Probability for response variable to be 1
-# Note: Due to application for logistic regression, use invlogit function
-#prob_observed_outcome = 1/(exp(-lin_combination))
-prob_observed_outcome = 1/(3+exp(-lin_combination))
-prob_observed_outcome
+# Note: Due to application for logistic regression, use inverse logit function
+prob_observed_outcome = 1/(1+exp(-lin_combination))
 
-# Add noise
-# tbd
+# Check that values are not approaching either 0 or 1 to avoid too deterministic approach
+summary(prob_observed_outcome)
 
 # Binary outcome variable as Bernoulli response variable
 # e.g., diabetes positive (1) or negative (0)
 # Desired probability for outcome_var = 1 between 20% and 30% to consider imbalance
-#outcome_var = rbinom(n = 1000, size = 1, prob = prob_observed_outcome)
-outcome_var = rbinom(n = 1000, size = 1, prob = 0.2)
+outcome_var = rbinom(n = 1000, size = 1, prob = prob_observed_outcome)
 summary(outcome_var)
 hist(outcome_var)
 
@@ -77,8 +83,9 @@ df_complete = data.frame(
 ######################################
 
 # Split data into test and training data
+split_prob = c(0.7)
 training_samples <- df_complete$outcome_var %>% 
-  createDataPartition(p = 0.7, list = FALSE)
+  createDataPartition(p = split_prob, list = FALSE)
 
 train_data = df_complete[training_samples, ]
 test_data = df_complete[-training_samples, ]
@@ -94,27 +101,22 @@ summary(model_complete)$coef
 prob_expected_outcome <- model_complete %>% predict(test_data, type = "response")
 summary(model_complete$fitted.values)
 
-# normalize
 predicted_classes = ifelse(prob_expected_outcome > 0.5, 1, 0)
 predicted_classes
 
-# Assess model accuracy
-mean(predicted_classes == test_data$outcome_var)
-
 # Value for O:E ratio by comparison of probabilities
-#prob_based_oe = mean(prob_observed_outcome) / mean(prob_expected_outcome)
-prob_based_oe
+oe_prob_based = mean(prob_observed_outcome) / mean(prob_expected_outcome)
+oe_prob_based
 
 # Calculate total O:E ratio & its standard error based on complete data
 oe_complete <- oecalc(
-             O = , # numeric vector of observed events
-             E = , # numeric vector of expected events
+             O = sum(df_complete$outcome_var == 1), # numeric vector of observed events
+             E = sum(predicted_classes == 1)/(1-split_prob), # numeric vector of expected events
              N = 1000
              )
 
 ## Display result of total O:E ratio & its standard error based on complete data and logistic model
 oe_complete
-plot(eo_complete)
 
 ######################################
 ## Ampute data from complete data set
@@ -122,7 +124,7 @@ plot(eo_complete)
 
 # Define parameters for amputation
 myprop = c(0.15) # Choose percentage of missing cells (define reasonably between 0.1 and 0.2)
-mypattern = rbind(c(0, 0, 1), c(1, 0 ,1), c(0, 1, 1)) # Choose missingness pattern (0==missing, 1==non-missing)
+mypattern = rbind(c(0, 0, 1), c(1, 0 ,1), c(0, 1, 1)) # Choose missingness pattern (0 == missing, 1 == non-missing)
 myfreq = c(0.1, 0.45, 0.45) # Choose relative occurence of these patterns
 mymech = c("MAR") # Choose missingness mechanism (MAR based on literature)
 myweights = ampute.default.weights(mypattern, mymech) # Choose weights of weighted sum scores
@@ -153,7 +155,7 @@ bwplot(amputation, which.pat = c(1, 3), descriptives = TRUE)
 xyplot(amputation, which.pat = 1)
 
 # check for convergence. Update if full convergence.
-#tbd
+#tbd. Pattern? No? Good.
 
 # Create multiple logistic regression model based on amputed data for comparison
 model_amputed = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
@@ -177,11 +179,11 @@ df_amputed$outcome_var <- as.factor(df_amputed$outcome_var)
 imp_method = c("pmm", "pmm", "logreg") 
 
 # Impute data via mice
-set.seed(18)
 imputation = mice(data = df_amputed, 
               maxit = imp_amount, 
               method = imp_method, 
-              print = TRUE
+              print = TRUE,
+              seed = 18
               )
 
 # Inspect the imputed data sets
@@ -192,9 +194,15 @@ df_imp_4 = complete(imputation,4)
 df_imp_5 = complete(imputation,5)
 
 ######################################
-## Calculate O:E ratio and its transformations and visualize results based on imputed data
-## Note: Implement correct O:E ratio, below just testing function
+## Transformation of O:E and Pooling
 ######################################
+
+#fit <- with(imputation,glm(outcome_var ~ continuous_var_1 +
+#                              continuous_var_2))
+#
+#pooled <- pool.syn(fit, dfcom = NULL, rule = "reiter2003")
+#
+#summary(pooled)
 
 # Calculate total O:E ratio & its standard error based on imputed model
 oe_imputed <- oecalc(
@@ -228,16 +236,11 @@ plot(log_oe)
 ######################################
 
 ######################################
-## Pooling procedure
+## Externally validate by new data set 
 ######################################
 
 ######################################
-## Evaluate performance of study
+## Externally to MNAR reference method
 ######################################
-
-######################################
-## Compare results to reference method
-######################################
-
 
 
