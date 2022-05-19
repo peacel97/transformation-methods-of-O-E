@@ -1,5 +1,14 @@
 ####### V0 Simulation study
 
+# Threshold predicted class, normalize?
+# Change one continuous variable to binary?
+# External validation
+# Shrinkage
+# Interpretation difference complete data and amputed data too little?
+# Pseudo code for chapter 3
+# loop repetition
+
+
 ######################################
 ### Install and load required packages
 ######################################
@@ -93,6 +102,7 @@ summary(model_complete)$coef
 prob_expected_outcome <- model_complete %>% predict(test_data, type = "response")
 summary(model_complete$fitted.values)
 
+# !!!! Predicted classes are not correct. Threshold? Normalize?
 predicted_classes = ifelse(prob_expected_outcome > 0.5, 1, 0)
 predicted_classes
 
