@@ -1,6 +1,40 @@
 ####### V0 Simulation study
 
 ######################################
+### TO DO
+######################################
+
+# Threshold predicted class, normalize?
+# Change one continuous variable to binary?
+# External validation
+# Shrinkage
+# Pseudo code for chapter 3
+# loop repetition
+
+######################################
+### Open questions
+######################################
+
+# Proportion for split
+# Max iteration in imputation???
+# Interpretation difference complete data and amputed data too little?
+# Shrinkage?
+
+
+######################################
+### Steps
+######################################
+# Generate simulation data
+# Calculate O:E ratio as reference
+# Ampute data
+# Split data in train and test data set
+# Multiple imputation on train data set
+# Calculate O:E ratio for each imputed data set
+# Pool
+# Check for each round of simulation if ratio falls into true ratio
+# Externally validate
+
+######################################
 ### Install and load required packages
 ######################################
 
@@ -28,7 +62,7 @@ package.check <- lapply(
 )
 
 ######################################
-## Generate data
+## Generate data for simulation
 ######################################
 
 ## Set seed to get reproducible results
@@ -71,7 +105,7 @@ df_complete = data.frame(
            )
 
 ######################################
-## Build logistic regression, predict outcomes & calculate original O:E ratio
+## Calculate reference O:E ratio based on logistic regression model with complete data
 ######################################
 
 # Split data into test and training data
@@ -112,7 +146,7 @@ oe_complete <- oecalc(
 oe_complete
 
 ######################################
-## Ampute data from complete data set
+## Ampute data from complete data set using MAR mechanism
 ######################################
 
 # Define parameters for amputation
@@ -158,40 +192,147 @@ model_amputed = glm(outcome_var ~ continuous_var_1 + continuous_var_2,
 summary(model_amputed)$coef
 
 ######################################
-## Impute data
+## Split amputed data into training and test data
+######################################
+
+# Split amputed data into training and test data
+split_prob_amputed = c(0.7)
+training_samples_amputed <- df_amputed$outcome_var %>% 
+  createDataPartition(p = split_prob_amputed, list = FALSE)
+
+df_train_amputed = df_amputed[training_samples_amputed, ]
+df_test_amputed = df_amputed[-training_samples_amputed, ]
+
+######################################
+## Perform multiple imputation on the training data
 ######################################
 
 # Choose number of imputed data sets (reasonably between 5 and 10)
-imp_amount = c(5)
+imp_amount = c(10)
+
+# Choose number of iterations
+imp_iteration = c(1)
 
 # Outcome variable as categorical variable for imp_method logreg
-df_amputed$outcome_var <- as.factor(df_amputed$outcome_var)
+df_train_amputed$outcome_var <- as.factor(df_train_amputed$outcome_var)
 
 # Choose imputation method
-# pmm default method for numeric data; logreg method for binary data
+# Interpretation: pmm default method for numeric data; logreg method for binary data
 imp_method = c("pmm", "pmm", "logreg") 
 
 # Impute data via mice
-imputation = mice(data = df_amputed, 
-              maxit = imp_amount, 
+imputation = mice(data = df_train_amputed, 
+              m = imp_amount, 
+              maxit = imp_iteration,
               method = imp_method, 
               print = TRUE,
               seed = 18
               )
 
-# Inspect the imputed data sets
-df_imp_1 = complete(imputation,1)
-df_imp_2 = complete(imputation,2)
-df_imp_3 = complete(imputation,3)
-df_imp_4 = complete(imputation,4)
-df_imp_5 = complete(imputation,5)
+# Inspect and save the imputed data sets
+#for (i in 1:imp_amount){
+#  imp[i] = complete(imputation, i)
+#  fit_imp[i] = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
+#                   data = imp[i], 
+#                   family = binomial)
+#}
+
+imp_1 = complete(imputation,1)
+imp_2 = complete(imputation,2)
+imp_3 = complete(imputation,3)
+imp_4 = complete(imputation,4)
+imp_5 = complete(imputation,5)
+imp_6 = complete(imputation,6)
+imp_7 = complete(imputation,7)
+imp_8 = complete(imputation,8)
+imp_9 = complete(imputation,9)
+imp_10 = complete(imputation,10)
+
+######################################
+## Fit the prediction model for each imputed data set
+######################################
+
+# Fit the model for each imputed data set (here imp_1)
+model_imputed_1 = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
+                    data = imp_1, 
+                    family = binomial
+)
+
+model_imputed_2 = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
+                      data = imp_2, 
+                      family = binomial
+)
+
+# Predict on test data (here imp_1)
+fit_model_imp_1 <- model_imputed_1 %>% predict(df_test_amputed, type = "response")
+summary(model_imputed_1$fitted.values)
+
+fit_model_imp_2 <- model_imputed_2 %>% predict(df_test_amputed, type = "response")
+summary(model_imputed_2$fitted.values)
+
+prob_expected_outcome_imp_1 = mean(model_imputed_1$fitted.values)
+prob_expected_outcome_imp_1
+
+prob_expected_outcome_imp_2 = mean(model_imputed_2$fitted.values)
+prob_expected_outcome_imp_2
+
+######################################
+## Calculate O:E, log(O:E) and square_root(O:E) for each imputed data set
+######################################
+
+# Probability for observed outcome for each imputed data set
+prob_observed_outcome_imp_1 = sum(df_imp_1$outcome_var == 1) / nrow(df_imp_1)
+prob_observed_outcome_imp_1
+
+# Calculate regular O:E ratio for each imputed data set (here imp_1)
+oe_prob_based_imp_1 = mean(prob_observed_outcome_imp_1) / prob_expected_outcome_imp_1
+oe_prob_based_imp_1
+
+# Probability for observed outcome for each imputed data set
+prob_observed_outcome_imp_2 = sum(df_imp_2$outcome_var == 1) / nrow(df_imp_2)
+prob_observed_outcome_imp_2
+
+# Calculate regular O:E ratio for each imputed data set (here imp_1)
+oe_prob_based_imp_2 = mean(prob_observed_outcome_imp_2) / prob_expected_outcome_imp_2
+oe_prob_based_imp_2
+
+# Calculate log(O:E) ratio for each imputed data set
+log(oe_prob_based_imp_1)
+
+
+######################################
+## Pooling procedure
+######################################
+
+# Make object type compatible for pooling
+
+
+# Pool the data sets to one
+pool.syn(model_imputed_1,  rule = "reiter2003")
+
+
+# Back-transformation total O:E ratio
+back_oe = exp()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ######################################
 ## Transformation of O:E and Pooling
 ######################################
 
-#fit <- with(imputation,glm(outcome_var ~ continuous_var_1 +
-#                              continuous_var_2))
+
 #
 #pooled <- pool.syn(fit, dfcom = NULL, rule = "reiter2003")
 #
@@ -224,16 +365,23 @@ plot(log_oe)
 
 # Display results of square root transformation of O:E ratio
 
+# Pooling procedure
+
+# Back-transformation to the original scale
+
 ######################################
 ## Compare performance of different O:E measures
 ######################################
+
+
 
 ######################################
 ## Externally validate by new data set 
 ######################################
 
 ######################################
-## Externally to MNAR reference method
+## Robustness check with complete case analysis
 ######################################
 
+# Testing: As data are missing MAR in the simulation study, they should be less biased compared to complete case analysis
 
