@@ -1,27 +1,6 @@
 ####### V0 Simulation study
 
 ######################################
-### TO DO
-######################################
-
-# Threshold predicted class, normalize?
-# Change one continuous variable to binary?
-# External validation
-# Shrinkage
-# Pseudo code for chapter 3
-# loop repetition
-
-######################################
-### Open questions
-######################################
-
-# Proportion for split
-# Max iteration in imputation???
-# Interpretation difference complete data and amputed data too little?
-# Shrinkage?
-
-
-######################################
 ### Steps
 ######################################
 # Generate simulation data
@@ -62,38 +41,37 @@ package.check <- lapply(
 )
 
 ######################################
-## Generate data for simulation
+## Generate data for simulation: Define variables, distribution of data and sample size
 ######################################
 
 ## Set seed to get reproducible results
 set.seed(18)
 
-## Define variables, distribution of data and sample size
+# Choose sample size 
+n_sample = c(1000)
 
-# continuous variables could be e.g., blood pressure
-continuous_var_1 = rnorm(n = 1000, mean = 2.0, sd = 0.5)
+# Continuous predictor variables
+continuous_var_1 = rnorm(n = n_sample, mean = 2.0, sd = 0.5)
 summary(continuous_var_1)
 hist(continuous_var_1)
 
-continuous_var_2 = rnorm(n = 1000, mean = 1.5, sd = 0.25)
+continuous_var_2 = rnorm(n = n_sample, mean = 1.5, sd = 0.25)
 summary(continuous_var_2)
 hist(continuous_var_2)
 
-# Create linear combination 
-# with or without bias as intercept?
+# Create linear combination of predictor variables and intercept
 lin_combination = -4.5 + continuous_var_1 + continuous_var_2
 
 # Probability for response variable to be 1
 # Note: Due to application for logistic regression, use inverse logit function
-prob_observed_outcome = 1/(1+exp(-lin_combination))
+prob_outcome = 1/(1+exp(-lin_combination))
 
 # Check that values are not approaching either 0 or 1 to avoid too deterministic approach
-summary(prob_observed_outcome)
+summary(prob_outcome)
 
 # Binary outcome variable as Bernoulli response variable
-# e.g., diabetes positive (1) or negative (0)
-# Desired probability for outcome_var = 1 between 20% and 30% to consider imbalance
-outcome_var = rbinom(n = 1000, size = 1, prob = prob_observed_outcome)
+# Note: Imbalanced Classification, desired probability for outcome_var = 1 between 20% and 30%
+outcome_var = rbinom(n = n_sample, size = 1, prob = prob_outcome)
 summary(outcome_var)
 hist(outcome_var)
 
@@ -108,42 +86,63 @@ df_complete = data.frame(
 ## Calculate reference O:E ratio based on logistic regression model with complete data
 ######################################
 
-# Split data into test and training data
-split_prob = c(0.7)
-training_samples <- df_complete$outcome_var %>% 
-  createDataPartition(p = split_prob, list = FALSE)
+## Split data into test and training data
+#split_prob = c(0.7)
+#training_samples_complete <- df_complete$outcome_var %>% 
+#  createDataPartition(p = split_prob, list = FALSE)
+#
+#train_data_complete = df_complete[training_samples_complete, ]
+#test_data_complete = df_complete[-training_samples_complete, ]
 
-train_data = df_complete[training_samples, ]
-test_data = df_complete[-training_samples, ]
-
-# Create multiple logistic regression model based on train data of df_complete
+# Create multiple logistic regression model based on complete data
 model_complete = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
-              data = train_data, 
+              data = df_complete, # train_data_complete
               family = binomial
               )
 summary(model_complete)$coef
 
-# Predicted outcomes to take as values for expected outcomes in O:E ratio
-prob_expected_outcome <- model_complete %>% predict(test_data, type = "response")
+# Fit model based on complete data
+fit_model_complete <- model_complete %>% predict(df_complete, # test_data_complete
+                                                 type = "response"
+                                                 )
+# Predicted probability
 summary(model_complete$fitted.values)
+prob_fitted = as.data.frame(model_complete$fitted.values)
 
-# !!!! Predicted classes are not correct. Threshold? Normalize?
-predicted_classes = ifelse(prob_expected_outcome > 0.5, 1, 0)
-predicted_classes
+# Rescale probability to [0;1] for predicting classes with threshold 0.5
+prob_fitted_scales <- data.frame(matrix(nrow = nrow(prob_fitted), ncol = ncol(prob_fitted)))
+for(i in seq_len(nrow(prob_fitted))){
+  column <- ((prob_fitted[i,1] - min(prob_fitted))/ (max(prob_fitted) - min(prob_fitted)))
+  prob_fitted_scales[i,1] <- column
+}
+names(prob_fitted_scales)[1] <- "classes"
+summary(prob_fitted_scales)
 
-# Value for O:E ratio by comparison of probabilities
-oe_prob_based = mean(prob_observed_outcome) / mean(prob_expected_outcome)
-oe_prob_based
+# Predicted classes
+predicted_classes = ifelse(prob_fitted_scales$classes > 0.5, 1, 0)
+sum_predicted_classes = sum(predicted_classes == 1)
+sum_predicted_classes
 
-# Calculate total O:E ratio & its standard error based on complete data
-oe_complete <- oecalc(
-             O = sum(df_complete$outcome_var == 1), # numeric vector of observed events
-             E = sum(predicted_classes == 1)/(1-split_prob), # numeric vector of expected events
+# Define observed and expected events based on complete data
+n_observed_event = sum(df_complete$outcome_var == 1)
+n_expected_event_1 = round(sum_predicted_classes/(split_prob))
+n_expected_event_2 = round(mean(model_complete$fitted.values)*n_sample)
+
+# O:E ratio with expected event calculated based on predicted classes
+oe_complete_1 = oecalc(
+             O = n_observed_event, # numeric vector of observed events
+             E = n_expected_event_1, # numeric vector of expected events
              N = 1000
              )
+oe_complete_1
 
-## Display result of total O:E ratio & its standard error based on complete data and logistic model
-oe_complete
+# O:E ratio with expected event calculated based on predicted probabilities
+oe_complete_2 = oecalc(
+  O = n_observed_event, # numeric vector of observed events
+  E = n_expected_event_2, # numeric vector of expected events
+  N = 1000
+)
+oe_complete_2
 
 ######################################
 ## Ampute data from complete data set using MAR mechanism
@@ -184,6 +183,17 @@ xyplot(amputation, which.pat = 1)
 # check for convergence. Update if full convergence.
 #tbd. Pattern? No? Good.
 
+######################################
+## Compare logistic regression model based on complete data and based on amputed data
+######################################
+
+# Create multiple logistic regression model based on complete data for comparison
+model_amputed = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
+                    data = df_complete, 
+                    family = binomial
+)
+summary(model_complete)$coef
+
 # Create multiple logistic regression model based on amputed data for comparison
 model_amputed = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
                     data = df_amputed, 
@@ -196,7 +206,7 @@ summary(model_amputed)$coef
 ######################################
 
 # Split amputed data into training and test data
-split_prob_amputed = c(0.7)
+split_prob_amputed = c(0.5)
 training_samples_amputed <- df_amputed$outcome_var %>% 
   createDataPartition(p = split_prob_amputed, list = FALSE)
 
@@ -204,7 +214,7 @@ df_train_amputed = df_amputed[training_samples_amputed, ]
 df_test_amputed = df_amputed[-training_samples_amputed, ]
 
 ######################################
-## Perform multiple imputation on the training data
+## Perform multiple imputation
 ######################################
 
 # Choose number of imputed data sets (reasonably between 5 and 10)
@@ -213,15 +223,16 @@ imp_amount = c(10)
 # Choose number of iterations
 imp_iteration = c(1)
 
-# Outcome variable as categorical variable for imp_method logreg
-df_train_amputed$outcome_var <- as.factor(df_train_amputed$outcome_var)
-
 # Choose imputation method
 # Interpretation: pmm default method for numeric data; logreg method for binary data
 imp_method = c("pmm", "pmm", "logreg") 
 
+# Outcome variable as categorical variable for imp_method logreg
+df_train_amputed$outcome_var <- as.factor(df_train_amputed$outcome_var)
+df_test_amputed$outcome_var <- as.factor(df_test_amputed$outcome_var)
+
 # Impute data via mice
-imputation = mice(data = df_train_amputed, 
+imputation_train = mice(data = df_train_amputed, 
               m = imp_amount, 
               maxit = imp_iteration,
               method = imp_method, 
@@ -229,76 +240,67 @@ imputation = mice(data = df_train_amputed,
               seed = 18
               )
 
+imputation_test = mice(data = df_test_amputed, 
+                        m = imp_amount, 
+                        maxit = imp_iteration,
+                        method = imp_method, 
+                        print = TRUE,
+                        seed = 18
+                       )
+
 # Inspect and save the imputed data sets
-#for (i in 1:imp_amount){
-#  imp[i] = complete(imputation, i)
-#  fit_imp[i] = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
-#                   data = imp[i], 
-#                   family = binomial)
-#}
-
-imp_1 = complete(imputation,1)
-imp_2 = complete(imputation,2)
-imp_3 = complete(imputation,3)
-imp_4 = complete(imputation,4)
-imp_5 = complete(imputation,5)
-imp_6 = complete(imputation,6)
-imp_7 = complete(imputation,7)
-imp_8 = complete(imputation,8)
-imp_9 = complete(imputation,9)
-imp_10 = complete(imputation,10)
+# Note: Due to imputation additional variables .imp and .id
+imputed_data_train = complete(imputation_train, "long")
+imputed_data_test = complete(imputation_test, "long")
 
 ######################################
-## Fit the prediction model for each imputed data set
+## Fit model for each imputed data set
 ######################################
 
-# Fit the model for each imputed data set (here imp_1)
-model_imputed_1 = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
-                    data = imp_1, 
-                    family = binomial
+#### Here: Test with .imp == 1
+
+# Subset data to relevant variables
+imputed_data_train_1_sub = subset(imputed_data_train, .imp == 1)
+imputed_data_train_1_sub = dplyr::select(imputed_data_train_1_sub, 
+                              continuous_var_1, 
+                              continuous_var_2,
+                              outcome_var
+                              )
+
+# Build model based on imp_1
+model_train_1 = glm(outcome_var ~ continuous_var_1 + continuous_var_2,
+                    data = imputed_data_train_1_sub,
+                    family = binomial 
+                    )
+summary(model_train_1)$coef
+
+# Predict model based on imp_1
+fit_model_imp_1 <- model_train_1 %>% predict(df_test_amputed, type = "response")
+summary(model_train_1$fitted.values)
+
+# Define observed and expected events for imp_1
+n_observed_event_imp_1 = sum(imputed_data_train_1_sub$outcome_var == 1)
+n_expected_event_imp_1 = round(mean(model_complete$fitted.values)*nrow(imputed_data_train_1_sub))
+
+# O:E ratio with expected event calculated based on predicted probabilities
+oe_complete_imp_1 = oecalc(
+  O = n_observed_event_imp_1, # numeric vector of observed events
+  E = n_expected_event_imp_1, # numeric vector of expected events
+  N = nrow(imputed_data_train_1_sub)
 )
+oe_complete_imp_1
 
-model_imputed_2 = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
-                      data = imp_2, 
-                      family = binomial
+# log(O:E) ratio with expected event calculated based on predicted probabilities
+log_oe_complete_imp_1 = oecalc(
+  O = n_observed_event_imp_1, # numeric vector of observed events
+  E = n_expected_event_imp_1, # numeric vector of expected events
+  N = nrow(imputed_data_train_1_sub),
+  g = "log(OE)"
 )
+log_oe_complete_imp_1
 
-# Predict on test data (here imp_1)
-fit_model_imp_1 <- model_imputed_1 %>% predict(df_test_amputed, type = "response")
-summary(model_imputed_1$fitted.values)
-
-fit_model_imp_2 <- model_imputed_2 %>% predict(df_test_amputed, type = "response")
-summary(model_imputed_2$fitted.values)
-
-prob_expected_outcome_imp_1 = mean(model_imputed_1$fitted.values)
-prob_expected_outcome_imp_1
-
-prob_expected_outcome_imp_2 = mean(model_imputed_2$fitted.values)
-prob_expected_outcome_imp_2
-
-######################################
-## Calculate O:E, log(O:E) and square_root(O:E) for each imputed data set
-######################################
-
-# Probability for observed outcome for each imputed data set
-prob_observed_outcome_imp_1 = sum(df_imp_1$outcome_var == 1) / nrow(df_imp_1)
-prob_observed_outcome_imp_1
-
-# Calculate regular O:E ratio for each imputed data set (here imp_1)
-oe_prob_based_imp_1 = mean(prob_observed_outcome_imp_1) / prob_expected_outcome_imp_1
-oe_prob_based_imp_1
-
-# Probability for observed outcome for each imputed data set
-prob_observed_outcome_imp_2 = sum(df_imp_2$outcome_var == 1) / nrow(df_imp_2)
-prob_observed_outcome_imp_2
-
-# Calculate regular O:E ratio for each imputed data set (here imp_1)
-oe_prob_based_imp_2 = mean(prob_observed_outcome_imp_2) / prob_expected_outcome_imp_2
-oe_prob_based_imp_2
-
-# Calculate log(O:E) ratio for each imputed data set
-log(oe_prob_based_imp_1)
-
+# square root O:E ratio with expected event calculated based on predicted probabilities
+#tbd
 
 ######################################
 ## Pooling procedure
@@ -306,82 +308,29 @@ log(oe_prob_based_imp_1)
 
 # Make object type compatible for pooling
 
-
 # Pool the data sets to one
-pool.syn(model_imputed_1,  rule = "reiter2003")
+# pool.syn(imputation,  rule = "reiter2003")
 
+######################################
+## Back-transformation of O:E ratios
+######################################
 
-# Back-transformation total O:E ratio
+# Back-transformation O:E ratio to original scale
 back_oe = exp()
 
+# Back-transformation log(O:E) ratio to original scale
 
-
-
-
-
-
-
-
-
-
-
-
-
+# Back-transformation square root (O:E) ratio to original scale
 
 ######################################
-## Transformation of O:E and Pooling
+## Compare performance of different O:E measures by n = ??? repetitions of the simulation study
 ######################################
-
-
-#
-#pooled <- pool.syn(fit, dfcom = NULL, rule = "reiter2003")
-#
-#summary(pooled)
-
-# Calculate total O:E ratio & its standard error based on imputed model
-oe_imputed <- oecalc(
-  O = , # numeric vector of observed events
-  E = , # numeric vector of expected events
-  N = 1000
-)
-
-## Display result of O:E ratio
-oe_imputed
-plot(eo)
-
-## Calculate log(O:E) ratio & its standard error based on imputed data
-log_oe <- oecalc(
-  O = , # numeric vector of observed events
-  E = , # numeric vector of expected events
-  N = 1000,
-  g = "log(OE)"
-)
-
-## Display result of log(O:E) ratio
-log_oe
-plot(log_oe)
-
-# Calculate square root transformation of O:E ratio based on imputed data
-
-# Display results of square root transformation of O:E ratio
-
-# Pooling procedure
-
-# Back-transformation to the original scale
-
-######################################
-## Compare performance of different O:E measures
-######################################
-
-
 
 ######################################
 ## Externally validate by new data set 
 ######################################
 
 ######################################
-## Robustness check with complete case analysis
+## "Robustness check" with complete case analysis
 ######################################
-
 # Testing: As data are missing MAR in the simulation study, they should be less biased compared to complete case analysis
-
