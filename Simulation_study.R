@@ -1,17 +1,20 @@
-####### V0 Simulation study
+####### V1 Simulation study
 
 ######################################
 ### Steps
 ######################################
 # Generate simulation data
+# Split data
+# Prediction model
 # Calculate O:E ratio as reference
-# Ampute data
-# Split data in train and test data set
-# Multiple imputation on train data set
-# Calculate O:E ratio for each imputed data set
+# Ampute data of validation set
+# Multiple imputation of validaton set
+# Predict values 
+# Calculate O:E ratios for each imputed data set
 # Pool
+# Transform back
+# Repeat 1000 times
 # Check for each round of simulation if ratio falls into true ratio
-# Externally validate
 
 ######################################
 ### Install and load required packages
@@ -48,7 +51,7 @@ package.check <- lapply(
 set.seed(18)
 
 # Choose sample size 
-n_sample = c(1000)
+n_sample = c(2000)
 
 # Continuous predictor variables
 continuous_var_1 = rnorm(n = n_sample, mean = 2.0, sd = 0.5)
@@ -83,66 +86,76 @@ df_complete = data.frame(
            )
 
 ######################################
-## Calculate reference O:E ratio based on logistic regression model with complete data
+## Split data and develop prediction model
 ######################################
 
 ## Split data into test and training data
-#split_prob = c(0.7)
-#training_samples_complete <- df_complete$outcome_var %>% 
-#  createDataPartition(p = split_prob, list = FALSE)
-#
-#train_data_complete = df_complete[training_samples_complete, ]
-#test_data_complete = df_complete[-training_samples_complete, ]
+split_prob = c(0.5)
+training_samples_complete <- df_complete$outcome_var %>% 
+  createDataPartition(p = split_prob, list = FALSE)
+
+train_data_complete = df_complete[training_samples_complete, ]
+test_data_complete = df_complete[-training_samples_complete, ]
 
 # Create multiple logistic regression model based on complete data
 model_complete = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
-              data = df_complete, # train_data_complete
-              family = binomial
-              )
+                     data = train_data_complete,
+                     family = binomial
+)
 summary(model_complete)$coef
 
+######################################
+## Calculate reference O:E ratio based on logistic regression model with complete data
+######################################
+
 # Fit model based on complete data
-fit_model_complete <- model_complete %>% predict(df_complete, # test_data_complete
+fit_model_complete <- model_complete %>% predict(test_data_complete,
                                                  type = "response"
                                                  )
 # Predicted probability
 summary(model_complete$fitted.values)
 prob_fitted = as.data.frame(model_complete$fitted.values)
 
-# Rescale probability to [0;1] for predicting classes with threshold 0.5
-prob_fitted_scales <- data.frame(matrix(nrow = nrow(prob_fitted), ncol = ncol(prob_fitted)))
-for(i in seq_len(nrow(prob_fitted))){
-  column <- ((prob_fitted[i,1] - min(prob_fitted))/ (max(prob_fitted) - min(prob_fitted)))
-  prob_fitted_scales[i,1] <- column
-}
-names(prob_fitted_scales)[1] <- "classes"
-summary(prob_fitted_scales)
-
-# Predicted classes
-predicted_classes = ifelse(prob_fitted_scales$classes > 0.5, 1, 0)
-sum_predicted_classes = sum(predicted_classes == 1)
-sum_predicted_classes
-
 # Define observed and expected events based on complete data
 n_observed_event = sum(df_complete$outcome_var == 1)
-n_expected_event_1 = round(sum_predicted_classes/(split_prob))
-n_expected_event_2 = round(mean(model_complete$fitted.values)*n_sample)
-
-# O:E ratio with expected event calculated based on predicted classes
-oe_complete_1 = oecalc(
-             O = n_observed_event, # numeric vector of observed events
-             E = n_expected_event_1, # numeric vector of expected events
-             N = 1000
-             )
-oe_complete_1
+n_expected_event = round(mean(model_complete$fitted.values)*n_sample)
 
 # O:E ratio with expected event calculated based on predicted probabilities
 oe_complete_2 = oecalc(
   O = n_observed_event, # numeric vector of observed events
-  E = n_expected_event_2, # numeric vector of expected events
+  E = n_expected_event, # numeric vector of expected events
   N = 1000
 )
 oe_complete_2
+
+# # Predicted classes
+# predicted_classes = ifelse(prob_fitted > 0.5, 1, 0)
+# predicted_classes
+# 
+# # Rescale probability to [0;1] for predicting classes with threshold 0.5
+# prob_fitted_scales <- data.frame(matrix(nrow = nrow(prob_fitted), ncol = ncol(prob_fitted)))
+# for(i in seq_len(nrow(prob_fitted))){
+#   column <- ((prob_fitted[i,1] - min(prob_fitted))/ (max(prob_fitted) - min(prob_fitted)))
+#   prob_fitted_scales[i,1] <- column
+# }
+# names(prob_fitted_scales)[1] <- "classes"
+# summary(prob_fitted_scales)
+# 
+# # Predicted classes
+# predicted_classes = ifelse(prob_fitted_scales$classes > 0.5, 1, 0) 
+# sum_predicted_classes = sum(predicted_classes == 1)
+# sum_predicted_classes
+
+
+
+# # O:E ratio with expected event calculated based on predicted classes
+# n_expected_event_1 = round(sum_predicted_classes/(split_prob))
+# oe_complete_1 = oecalc(
+#              O = n_observed_event, # numeric vector of observed events
+#              E = n_expected_event_1, # numeric vector of expected events
+#              N = 1000
+#              )
+# oe_complete_1
 
 ######################################
 ## Ampute data from complete data set using MAR mechanism
@@ -157,7 +170,7 @@ myweights = ampute.default.weights(mypattern, mymech) # Choose weights of weight
 
 # Carry out amputation replacing it by NA
 # Note for interpretation: Proportion of missingness in terms of cells not in terms of cases
-amputation = ampute(data = df_complete, 
+amputation = ampute(data = train_data_complete, # df_complete, 
                     patterns = mypattern,
                     prop = myprop, 
                     freq = myfreq, 
@@ -188,7 +201,7 @@ xyplot(amputation, which.pat = 1)
 ######################################
 
 # Create multiple logistic regression model based on complete data for comparison
-model_amputed = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
+model_complete = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
                     data = df_complete, 
                     family = binomial
 )
