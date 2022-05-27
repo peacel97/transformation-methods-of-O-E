@@ -364,16 +364,16 @@ pooled_theta_log_oe = mean(log_oe$theta)
 pooled_theta_sqrt_oe = mean(sqrt_oe$theta)
 
 # Pool the standard errors of the o:e estimates (theta.se)
-pooled_se_regular_oe = mean(regular_oe$theta.se)
+# pooled_se_regular_oe = 
 # pooled_se_log_oe = 
 # pooled_se_sqrt_oe = 
 
 # Pool the confidence intervals of the o:e estimates (theta.cilb and theta.ciub)
-pooled_cilb_regular_oe = mean(regular_oe$theta.cilb)
+# pooled_cilb_regular_oe = 
 # pooled_cilb_log_oe = 
 # pooled_cilb_sqrt_oe = 
 # 
-pooled_ciub_regular_oe = mean(regular_oe$theta.ciub)
+# pooled_ciub_regular_oe =
 # pooled_ciub_log_oe = 
 # pooled_ciub_sqrt_oe = 
 
