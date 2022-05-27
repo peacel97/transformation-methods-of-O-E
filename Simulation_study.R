@@ -1,6 +1,26 @@
 ####### V1 Simulation study
 
 ######################################
+# Open:
+# Split ratio
+# Reference O:E exactly 1?
+# Convergence
+# Reference O:E based on complete data or on split data?
+######################################
+
+######################################
+# TO DO
+# Write pool_se and pool_ci function
+# Write function for CI in reference O:E
+# Change predictor variable to binary
+# Check for convergence. Update if full convergence. tbd. Pattern? No? Good.
+# Loop over imputations
+# Increase imputation to 10 as soon as loop implemented
+# Check nrow of observed and expected events
+# For loop simulation study repetition
+######################################
+
+######################################
 ### Steps
 ######################################
 # Generate simulation data
@@ -32,7 +52,7 @@ packages = c("mice",
              "logit"
              )
 
-# Install&load packages or load packages, if already installed
+## Install&load packages or load packages, if already installed
 package.check <- lapply(
   packages,
   FUN = function(x) {
@@ -44,7 +64,7 @@ package.check <- lapply(
 )
 
 ######################################
-## Generate data for simulation: Define variables, distribution of data and sample size
+## Generate data
 ######################################
 
 ## Set seed to get reproducible results
@@ -113,52 +133,22 @@ fit_model_complete <- model_complete %>% predict(test_data_complete,
                                                  type = "response"
                                                  )
 # Predicted probability
-summary(model_complete$fitted.values)
-prob_fitted = as.data.frame(model_complete$fitted.values)
+summary(fit_model_complete)
 
 # Define observed and expected events based on complete data
 n_observed_event = sum(df_complete$outcome_var == 1)
-n_expected_event = round(mean(model_complete$fitted.values)*n_sample)
+n_expected_event = mean(fit_model_complete)*n_sample
 
 # O:E ratio with expected event calculated based on predicted probabilities
-oe_complete_2 = oecalc(
+reference_oe = oecalc(
   O = n_observed_event, # numeric vector of observed events
   E = n_expected_event, # numeric vector of expected events
-  N = 1000
+  N = 2000
 )
-oe_complete_2
-
-# # Predicted classes
-# predicted_classes = ifelse(prob_fitted > 0.5, 1, 0)
-# predicted_classes
-# 
-# # Rescale probability to [0;1] for predicting classes with threshold 0.5
-# prob_fitted_scales <- data.frame(matrix(nrow = nrow(prob_fitted), ncol = ncol(prob_fitted)))
-# for(i in seq_len(nrow(prob_fitted))){
-#   column <- ((prob_fitted[i,1] - min(prob_fitted))/ (max(prob_fitted) - min(prob_fitted)))
-#   prob_fitted_scales[i,1] <- column
-# }
-# names(prob_fitted_scales)[1] <- "classes"
-# summary(prob_fitted_scales)
-# 
-# # Predicted classes
-# predicted_classes = ifelse(prob_fitted_scales$classes > 0.5, 1, 0) 
-# sum_predicted_classes = sum(predicted_classes == 1)
-# sum_predicted_classes
-
-
-
-# # O:E ratio with expected event calculated based on predicted classes
-# n_expected_event_1 = round(sum_predicted_classes/(split_prob))
-# oe_complete_1 = oecalc(
-#              O = n_observed_event, # numeric vector of observed events
-#              E = n_expected_event_1, # numeric vector of expected events
-#              N = 1000
-#              )
-# oe_complete_1
+reference_oe
 
 ######################################
-## Ampute data from complete data set using MAR mechanism
+## Ampute test data 
 ######################################
 
 # Define parameters for amputation
@@ -170,7 +160,7 @@ myweights = ampute.default.weights(mypattern, mymech) # Choose weights of weight
 
 # Carry out amputation replacing it by NA
 # Note for interpretation: Proportion of missingness in terms of cells not in terms of cases
-amputation = ampute(data = train_data_complete, # df_complete, 
+amputation = ampute(data = test_data_complete,
                     patterns = mypattern,
                     prop = myprop, 
                     freq = myfreq, 
@@ -179,6 +169,13 @@ amputation = ampute(data = train_data_complete, # df_complete,
                     bycases = FALSE
                     )
 
+# save new data including amputations (NA) to data frame
+df_amputed = amputation$amp
+
+######################################
+## Evaluation of data amputation procedure
+######################################
+
 # Show that amputation has worked
 head(amputation$amp)
 summary(amputation)
@@ -186,52 +183,26 @@ summary(amputation)
 # Visualization of missing data pattern
 md.pattern(amputation$amp)
 
-# save new data including amputations (NA) to data frame
-df_amputed = amputation$amp
-
 # Evaluation of amputation
 bwplot(amputation, which.pat = c(1, 3), descriptives = TRUE)
 xyplot(amputation, which.pat = 1)
-
-# check for convergence. Update if full convergence.
-#tbd. Pattern? No? Good.
-
-######################################
-## Compare logistic regression model based on complete data and based on amputed data
-######################################
-
-# Create multiple logistic regression model based on complete data for comparison
-model_complete = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
-                    data = df_complete, 
-                    family = binomial
-)
-summary(model_complete)$coef
 
 # Create multiple logistic regression model based on amputed data for comparison
 model_amputed = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
                     data = df_amputed, 
                     family = binomial
 )
+
+# Compare
 summary(model_amputed)$coef
-
-######################################
-## Split amputed data into training and test data
-######################################
-
-# Split amputed data into training and test data
-split_prob_amputed = c(0.5)
-training_samples_amputed <- df_amputed$outcome_var %>% 
-  createDataPartition(p = split_prob_amputed, list = FALSE)
-
-df_train_amputed = df_amputed[training_samples_amputed, ]
-df_test_amputed = df_amputed[-training_samples_amputed, ]
+summary(model_complete)$coef
 
 ######################################
 ## Perform multiple imputation
 ######################################
 
 # Choose number of imputed data sets (reasonably between 5 and 10)
-imp_amount = c(10)
+imp_amount = c(3)
 
 # Choose number of iterations
 imp_iteration = c(1)
@@ -241,11 +212,10 @@ imp_iteration = c(1)
 imp_method = c("pmm", "pmm", "logreg") 
 
 # Outcome variable as categorical variable for imp_method logreg
-df_train_amputed$outcome_var <- as.factor(df_train_amputed$outcome_var)
-df_test_amputed$outcome_var <- as.factor(df_test_amputed$outcome_var)
+df_amputed$outcome_var <- as.factor(df_amputed$outcome_var)
 
 # Impute data via mice
-imputation_train = mice(data = df_train_amputed, 
+imputation = mice(data = df_amputed, 
               m = imp_amount, 
               maxit = imp_iteration,
               method = imp_method, 
@@ -253,95 +223,201 @@ imputation_train = mice(data = df_train_amputed,
               seed = 18
               )
 
-imputation_test = mice(data = df_test_amputed, 
-                        m = imp_amount, 
-                        maxit = imp_iteration,
-                        method = imp_method, 
-                        print = TRUE,
-                        seed = 18
-                       )
-
 # Inspect and save the imputed data sets
-# Note: Due to imputation additional variables .imp and .id
-imputed_data_train = complete(imputation_train, "long")
-imputed_data_test = complete(imputation_test, "long")
+imputed_data_1 = complete(imputation, 1)
+imputed_data_2 = complete(imputation, 2)
+imputed_data_3 = complete(imputation, 3)
 
 ######################################
-## Fit model for each imputed data set
+## Fit the model with the imputed data sets
 ######################################
 
-#### Here: Test with .imp == 1
+# Predict model based on imputed_data_1
+fit_imp_1 <- model_complete %>% predict(imputed_data_1, 
+                                             type = "response"
+                                             )
+summary(fit_imp_1)
 
-# Subset data to relevant variables
-imputed_data_train_1_sub = subset(imputed_data_train, .imp == 1)
-imputed_data_train_1_sub = dplyr::select(imputed_data_train_1_sub, 
-                              continuous_var_1, 
-                              continuous_var_2,
-                              outcome_var
-                              )
-
-# Build model based on imp_1
-model_train_1 = glm(outcome_var ~ continuous_var_1 + continuous_var_2,
-                    data = imputed_data_train_1_sub,
-                    family = binomial 
-                    )
-summary(model_train_1)$coef
-
-# Predict model based on imp_1
-fit_model_imp_1 <- model_train_1 %>% predict(df_test_amputed, type = "response")
-summary(model_train_1$fitted.values)
-
-# Define observed and expected events for imp_1
-n_observed_event_imp_1 = sum(imputed_data_train_1_sub$outcome_var == 1)
-n_expected_event_imp_1 = round(mean(model_complete$fitted.values)*nrow(imputed_data_train_1_sub))
-
-# O:E ratio with expected event calculated based on predicted probabilities
-oe_complete_imp_1 = oecalc(
-  O = n_observed_event_imp_1, # numeric vector of observed events
-  E = n_expected_event_imp_1, # numeric vector of expected events
-  N = nrow(imputed_data_train_1_sub)
+# Predict model based on imputed_data_2
+fit_imp_2 <- model_complete %>% predict(imputed_data_2, 
+                                          type = "response"
 )
-oe_complete_imp_1
+summary(fit_imp_2)
 
-# log(O:E) ratio with expected event calculated based on predicted probabilities
-log_oe_complete_imp_1 = oecalc(
-  O = n_observed_event_imp_1, # numeric vector of observed events
-  E = n_expected_event_imp_1, # numeric vector of expected events
-  N = nrow(imputed_data_train_1_sub),
+# Predict model based on imputed_data_3
+fit_imp_3 <- model_complete %>% predict(imputed_data_3, 
+                                          type = "response"
+)
+summary(fit_imp_3)
+
+######################################
+## Calculate Regular O:E ratio
+######################################
+
+# Calculate regular O:E imp 1
+n_observed_event_imp_1 = sum(imputed_data_1$outcome_var == 1)
+n_expected_event_imp_1 = mean(fit_imp_1)*n_sample*split_prob
+
+regular_oe_1 = oecalc(
+  O = n_observed_event_imp_1,
+  E = n_expected_event_imp_1,
+  N = 1000
+)
+regular_oe_1
+
+# Calculate regular O:E for imp 2
+n_observed_event_imp_2 = sum(imputed_data_2$outcome_var == 1)
+n_expected_event_imp_2 = mean(fit_imp_2)*n_sample*split_prob
+
+regular_oe_2 = oecalc(
+  O = n_observed_event_imp_2,
+  E = n_expected_event_imp_2,
+  N = 1000
+)
+regular_oe_2
+
+# Calculate regular O:E for imp 3
+n_observed_event_imp_3 = sum(imputed_data_3$outcome_var == 1)
+n_expected_event_imp_3 = mean(fit_imp_3)*n_sample*split_prob
+
+regular_oe_3 = oecalc(
+  O = n_observed_event_imp_3,
+  E = n_expected_event_imp_3,
+  N = 1000
+)
+regular_oe_3
+
+######################################
+## Calculate Log(O:E) ratio
+######################################
+
+# Calculate log(O:E) for imp 1
+log_oe_1 = oecalc(
+  O = n_observed_event_imp_1,
+  E = n_expected_event_imp_1,
+  N = 1000,
   g = "log(OE)"
 )
-log_oe_complete_imp_1
+log_oe_1
 
-# square root O:E ratio with expected event calculated based on predicted probabilities
-#tbd
+# Calculate log(O:E) for imp 2
+log_oe_2 = oecalc(
+  O = n_observed_event_imp_2,
+  E = n_expected_event_imp_2,
+  N = 1000,
+  g = "log(OE)"
+)
+log_oe_2
+
+# Calculate log(O:E) for imp 3
+log_oe_3 = oecalc(
+  O = n_observed_event_imp_3,
+  E = n_expected_event_imp_3,
+  N = 1000,
+  g = "log(OE)"
+)
+log_oe_3
+
+######################################
+## Calculate Square_root(O:E) ratio
+######################################
+
+# Calculate square root (O:E) for imp 1
+sqrt_oe_1 = oecalc(
+  O = n_observed_event_imp_1,
+  E = n_expected_event_imp_1,
+  N = 1000,
+  g = "sqrt(OE)"
+)
+sqrt_oe_1
+
+# Calculate square root (O:E) for imp 2
+sqrt_oe_2 = oecalc(
+  O = n_observed_event_imp_2,
+  E = n_expected_event_imp_2,
+  N = 1000,
+  g = "sqrt(OE)"
+)
+sqrt_oe_2
+
+# Calculate square root (O:E) for imp 3
+sqrt_oe_3 = oecalc(
+  O = n_observed_event_imp_3,
+  E = n_expected_event_imp_3,
+  N = 1000,
+  g = "sqrt(OE)"
+)
+sqrt_oe_3
 
 ######################################
 ## Pooling procedure
 ######################################
 
-# Make object type compatible for pooling
+# Bind values together
+regular_oe = rbind(regular_oe_1, regular_oe_2, regular_oe_3)
+log_oe = rbind(log_oe_1, log_oe_2, log_oe_3)
+sqrt_oe = rbind(sqrt_oe_1, sqrt_oe_2, sqrt_oe_3)
 
-# Pool the data sets to one
-# pool.syn(imputation,  rule = "reiter2003")
+# Pool the o:e estimates (theta)
+pooled_theta_regular_oe = mean(regular_oe$theta)
+pooled_theta_log_oe = mean(log_oe$theta)
+pooled_theta_sqrt_oe = mean(sqrt_oe$theta)
+
+# Pool the standard errors of the o:e estimates (theta.se)
+pooled_se_regular_oe = mean(regular_oe$theta.se)
+# pooled_se_log_oe = 
+# pooled_se_sqrt_oe = 
+
+# Pool the confidence intervals of the o:e estimates (theta.cilb and theta.ciub)
+pooled_cilb_regular_oe = mean(regular_oe$theta.cilb)
+# pooled_cilb_log_oe = 
+# pooled_cilb_sqrt_oe = 
+# 
+pooled_ciub_regular_oe = mean(regular_oe$theta.ciub)
+# pooled_ciub_log_oe = 
+# pooled_ciub_sqrt_oe = 
 
 ######################################
-## Back-transformation of O:E ratios
+## Back-transformation of O:E ratios to original scale
 ######################################
 
-# Back-transformation O:E ratio to original scale
-back_oe = exp()
+back_theta_regular_oe = pooled_theta_regular_oe
+# back_se_regular_oe = pooled_se_regular_oe
+# back_cilb_regular_oe = pooled_cilb_regular_oe
+# back_ciup_regular_oe = pooled_ciub_regular_oe
+# 
+# final_regular_oe = cbind(back_theta_regular_oe, 
+#                          back_se_regular_oe, 
+#                          back_cilb_regular_oe, 
+#                          back_ciup_regular_oe
+#                          )
 
-# Back-transformation log(O:E) ratio to original scale
+back_theta_log_oe = exp(pooled_theta_log_oe)
+#back_se_log_oe = exp(pooled_se_log_oe)
+#back_cilb_log_oe = exp(pooled_cilb_log_oe)
+#back_ciup_log_oe = exp(pooled_ciup_log_oe)
+#
+# final_log_oe = cbind(back_theta_log_oe, 
+#                          back_se_log_oe, 
+#                          back_cilb_log_oe, 
+#                          back_ciup_log_oe
+#                          )
 
-# Back-transformation square root (O:E) ratio to original scale
+back_theta_sqrt_oe =(pooled_theta_sqrt_oe)^2
+#back_se_sqrt_oe = (pooled_se_sqrt_oe)^2
+#back_cilb_sqrt_oe = (pooled_cilb_sqrt_oe)^2
+#back_ciup_sqrt_oe = (pooled_ciup_sqrt_oe)^2
+#
+# final_sqrt_oe = cbind(back_theta_sqrt_oe, 
+#                          back_se_sqrt_oe, 
+#                          back_cilb_sqrt_oe, 
+#                          back_ciup_sqrt_oe
+#                          )
 
 ######################################
-## Compare performance of different O:E measures by n = ??? repetitions of the simulation study
+## Compare performance of O:E measures with reference O:E measure
 ######################################
-
-######################################
-## Externally validate by new data set 
-######################################
+# Check if reference O:E lies in the 95% CI of the O:E measure
 
 ######################################
 ## "Robustness check" with complete case analysis
