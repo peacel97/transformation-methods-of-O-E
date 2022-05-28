@@ -358,66 +358,103 @@ regular_oe = rbind(regular_oe_1, regular_oe_2, regular_oe_3)
 log_oe = rbind(log_oe_1, log_oe_2, log_oe_3)
 sqrt_oe = rbind(sqrt_oe_1, sqrt_oe_2, sqrt_oe_3)
 
-# Pool the o:e estimates (theta)
+# Pool the o:e estimates (theta) using the mean
 pooled_theta_regular_oe = mean(regular_oe$theta)
 pooled_theta_log_oe = mean(log_oe$theta)
 pooled_theta_sqrt_oe = mean(sqrt_oe$theta)
 
+# Function to pool standard errors
+pooled_se <- function(est, se, n.imp){
+  Qbar <- mean(est)
+  U <- sum(se**2)/n.imp # within-variance
+  B <- sum((est - Qbar)**2)/(n.imp-1) # between variance
+  se_total <- sqrt(U + (1+1/n.imp)*B)
+  r <- (1 + 1 / n.imp) * (B / U)
+  v <- (n.imp - 1) * (1 + (1/r))^2
+  t <- qt(0.975, v)
+  res <- c(se_total, t)
+  return(res)
+}
+
 # Pool the standard errors of the o:e estimates (theta.se)
-# pooled_se_regular_oe = 
-# pooled_se_log_oe = 
-# pooled_se_sqrt_oe = 
+pooled_se_regular_oe = pooled_se(est = regular_oe$theta, 
+                                 se = regular_oe$theta.se, 
+                                 n.imp = imp_amount
+                                   )
+
+pooled_se_log_oe = pooled_se(est = log_oe$theta, 
+                             se = log_oe$theta.se,
+                             n.imp = imp_amount
+                             )
+  
+pooled_se_sqrt_oe = pooled_se(est = sqrt_oe$theta, 
+                              se = sqrt_oe$theta.se,
+                              n.imp = imp_amount
+                              )
 
 # Pool the confidence intervals of the o:e estimates (theta.cilb and theta.ciub)
-# pooled_cilb_regular_oe = 
-# pooled_cilb_log_oe = 
-# pooled_cilb_sqrt_oe = 
-# 
-# pooled_ciub_regular_oe =
-# pooled_ciub_log_oe = 
-# pooled_ciub_sqrt_oe = 
+pooled_cilb_regular_oe = pooled_theta_regular_oe - pooled_se_regular_oe[2] * pooled_se_regular_oe[1]
+pooled_cilb_log_oe = pooled_theta_log_oe - pooled_se_log_oe[2] * pooled_se_log_oe[1]
+pooled_cilb_sqrt_oe = pooled_theta_sqrt_oe - pooled_se_sqrt_oe[2] * pooled_se_sqrt_oe[1]
+
+pooled_ciub_regular_oe = pooled_theta_regular_oe + pooled_se_regular_oe[2] * pooled_se_regular_oe[1]
+pooled_ciub_log_oe = pooled_theta_log_oe + pooled_se_log_oe[2] * pooled_se_log_oe[1]
+pooled_ciub_sqrt_oe = pooled_theta_sqrt_oe + pooled_se_sqrt_oe[2] * pooled_se_sqrt_oe[1]
 
 ######################################
 ## Back-transformation of O:E ratios to original scale
 ######################################
 
 back_theta_regular_oe = pooled_theta_regular_oe
-# back_se_regular_oe = pooled_se_regular_oe
-# back_cilb_regular_oe = pooled_cilb_regular_oe
-# back_ciup_regular_oe = pooled_ciub_regular_oe
-# 
-# final_regular_oe = cbind(back_theta_regular_oe, 
-#                          back_se_regular_oe, 
-#                          back_cilb_regular_oe, 
-#                          back_ciup_regular_oe
-#                          )
+back_se_regular_oe = pooled_se_regular_oe[1]
+back_cilb_regular_oe = pooled_cilb_regular_oe
+back_ciub_regular_oe = pooled_ciub_regular_oe
+
+final_regular_oe = cbind(back_theta_regular_oe, 
+                          back_se_regular_oe, 
+                          back_cilb_regular_oe, 
+                          back_ciub_regular_oe
+                          )
 
 back_theta_log_oe = exp(pooled_theta_log_oe)
-#back_se_log_oe = exp(pooled_se_log_oe)
-#back_cilb_log_oe = exp(pooled_cilb_log_oe)
-#back_ciup_log_oe = exp(pooled_ciup_log_oe)
-#
-# final_log_oe = cbind(back_theta_log_oe, 
-#                          back_se_log_oe, 
-#                          back_cilb_log_oe, 
-#                          back_ciup_log_oe
-#                          )
+back_se_log_oe = exp(pooled_se_log_oe[1])
+back_cilb_log_oe = exp(pooled_cilb_log_oe)
+back_ciub_log_oe = exp(pooled_ciub_log_oe)
+
+final_log_oe = cbind(back_theta_log_oe, 
+                          back_se_log_oe, 
+                          back_cilb_log_oe, 
+                          back_ciub_log_oe
+                     )
 
 back_theta_sqrt_oe =(pooled_theta_sqrt_oe)^2
-#back_se_sqrt_oe = (pooled_se_sqrt_oe)^2
-#back_cilb_sqrt_oe = (pooled_cilb_sqrt_oe)^2
-#back_ciup_sqrt_oe = (pooled_ciup_sqrt_oe)^2
-#
-# final_sqrt_oe = cbind(back_theta_sqrt_oe, 
-#                          back_se_sqrt_oe, 
-#                          back_cilb_sqrt_oe, 
-#                          back_ciup_sqrt_oe
-#                          )
+back_se_sqrt_oe = (pooled_se_sqrt_oe[1])^2
+back_cilb_sqrt_oe = (pooled_cilb_sqrt_oe)^2
+back_ciub_sqrt_oe = (pooled_ciub_sqrt_oe)^2
+
+final_sqrt_oe = cbind(back_theta_sqrt_oe, 
+                          back_se_sqrt_oe, 
+                          back_cilb_sqrt_oe, 
+                          back_ciub_sqrt_oe
+                          )
 
 ######################################
 ## Compare performance of O:E measures with reference O:E measure
 ######################################
-# Check if reference O:E lies in the 95% CI of the O:E measure
+
+# Show results
+reference_oe
+final_regular_oe
+final_log_oe
+final_sqrt_oe
+
+# Check if reference O:E lies in the 95% CI of the pooled O:E measure
+isTRUE(final_regular_oe[3] < reference_oe$theta & reference_oe$theta < final_regular_oe[4])
+isTRUE(final_log_oe[3] < reference_oe$theta & reference_oe$theta < final_log_oe[4])
+isTRUE(final_sqrt_oe[3] < reference_oe$theta & reference_oe$theta < final_sqrt_oe[4])
+
+# Visualize results
+# tbd
 
 ######################################
 ## "Robustness check" with complete case analysis
