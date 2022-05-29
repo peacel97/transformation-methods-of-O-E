@@ -2,21 +2,19 @@
 
 ######################################
 # Open:
-# Split ratio
+# Split ratio?
 # Reference O:E exactly 1?
-# Convergence
+# Convergence?
 # Reference O:E based on complete data or on split data?
 ######################################
 
 ######################################
 # TO DO
-# Write pool_se and pool_ci function
-# Write function for CI in reference O:E
-# Change predictor variable to binary
+# Change predictor variable to binary?
 # Check for convergence. Update if full convergence. tbd. Pattern? No? Good.
 # Loop over imputations
+# Shrinkage?
 # Increase imputation to 10 as soon as loop implemented
-# Check nrow of observed and expected events
 # For loop simulation study repetition
 ######################################
 
@@ -143,7 +141,7 @@ n_expected_event = mean(fit_model_complete)*n_sample
 reference_oe = oecalc(
   O = n_observed_event, # numeric vector of observed events
   E = n_expected_event, # numeric vector of expected events
-  N = 2000
+  N = nrow(df_complete)
 )
 reference_oe
 
@@ -223,7 +221,46 @@ imputation = mice(data = df_amputed,
               seed = 18
               )
 
-# Inspect and save the imputed data sets
+# Save the imputed data sets
+imputed_all = complete(imputation, "long")#alternative save as list of df
+
+regular_oe_list = list()
+log_oe_list = list()
+sqrt_oe_list = list()
+
+for (i in 1:imp_amount){
+  subset_imputed = subset(imputed_all, .imp == i)
+  subset_imputed = dplyr::select(subset_imputed, 
+                                 continuous_var_1, 
+                                 continuous_var_2, 
+                                 outcome_var)
+  fit_imp = model_complete %>% predict(subset_imputed, 
+                             type = "response")
+  summary(fit_imp)
+  regular_oe_list[[i]] = oecalc(
+    O = sum(subset_imputed$outcome_var == 1),
+    E = mean(fit_imp)*n_sample*split_prob,
+    N = nrow(subset_imputed)
+  )
+  log_oe_list[[i]] = oecalc(
+    O = sum(subset_imputed$outcome_var == 1),
+    E = mean(fit_imp)*n_sample*split_prob,
+    N = nrow(subset_imputed),
+    g = "log(OE)"
+  )
+  sqrt_oe_list[[i]] = oecalc(
+    O = sum(subset_imputed$outcome_var == 1),
+    E = mean(fit_imp)*n_sample*split_prob,
+    N = nrow(subset_imputed),
+    g = "sqrt(OE)"
+  )
+}
+
+regular_oe_list[[1]]
+log_oe_list[[1]]
+sqrt_oe_list[[1]]
+
+
 imputed_data_1 = complete(imputation, 1)
 imputed_data_2 = complete(imputation, 2)
 imputed_data_3 = complete(imputation, 3)
@@ -261,7 +298,7 @@ n_expected_event_imp_1 = mean(fit_imp_1)*n_sample*split_prob
 regular_oe_1 = oecalc(
   O = n_observed_event_imp_1,
   E = n_expected_event_imp_1,
-  N = 1000
+  N = nrow(imputed_data_1)
 )
 regular_oe_1
 
@@ -272,7 +309,7 @@ n_expected_event_imp_2 = mean(fit_imp_2)*n_sample*split_prob
 regular_oe_2 = oecalc(
   O = n_observed_event_imp_2,
   E = n_expected_event_imp_2,
-  N = 1000
+  N = nrow(imputed_data_2)
 )
 regular_oe_2
 
@@ -283,7 +320,7 @@ n_expected_event_imp_3 = mean(fit_imp_3)*n_sample*split_prob
 regular_oe_3 = oecalc(
   O = n_observed_event_imp_3,
   E = n_expected_event_imp_3,
-  N = 1000
+  N = nrow(imputed_data_3)
 )
 regular_oe_3
 
@@ -350,7 +387,7 @@ sqrt_oe_3 = oecalc(
 sqrt_oe_3
 
 ######################################
-## Pooling procedure
+## Pooling procedure: Pool estimates
 ######################################
 
 # Bind values together
@@ -363,7 +400,11 @@ pooled_theta_regular_oe = mean(regular_oe$theta)
 pooled_theta_log_oe = mean(log_oe$theta)
 pooled_theta_sqrt_oe = mean(sqrt_oe$theta)
 
-# Function to pool standard errors
+######################################
+## Pooling procedure: Pool standard errors
+######################################
+
+# Function to pool standard errors and receive respective t-values
 pooled_se <- function(est, se, n.imp){
   Qbar <- mean(est)
   U <- sum(se**2)/n.imp # within-variance
@@ -392,14 +433,30 @@ pooled_se_sqrt_oe = pooled_se(est = sqrt_oe$theta,
                               n.imp = imp_amount
                               )
 
-# Pool the confidence intervals of the o:e estimates (theta.cilb and theta.ciub)
-pooled_cilb_regular_oe = pooled_theta_regular_oe - pooled_se_regular_oe[2] * pooled_se_regular_oe[1]
-pooled_cilb_log_oe = pooled_theta_log_oe - pooled_se_log_oe[2] * pooled_se_log_oe[1]
-pooled_cilb_sqrt_oe = pooled_theta_sqrt_oe - pooled_se_sqrt_oe[2] * pooled_se_sqrt_oe[1]
+######################################
+## Pooling procedure: Pool Confidence intervals
+######################################
 
-pooled_ciub_regular_oe = pooled_theta_regular_oe + pooled_se_regular_oe[2] * pooled_se_regular_oe[1]
-pooled_ciub_log_oe = pooled_theta_log_oe + pooled_se_log_oe[2] * pooled_se_log_oe[1]
-pooled_ciub_sqrt_oe = pooled_theta_sqrt_oe + pooled_se_sqrt_oe[2] * pooled_se_sqrt_oe[1]
+# Function to calculate confidence interval
+pooled_ci <- function(est, se, tvalue){
+  theta.cilb <- est - tvalue * se
+  theta.ciub <- est + tvalue * se
+  ci <- c(theta.cilb, theta.ciub)
+  return(ci)
+}
+
+# Pool the confidence intervals of the o:e estimates (theta.cilb and theta.ciub)
+pooled_ci_regular_oe = pooled_ci(est = pooled_theta_regular_oe,
+                                   tvalue = pooled_se_regular_oe[2],
+                                   se = pooled_se_regular_oe[1])
+
+pooled_ci_log_oe = pooled_ci(est = pooled_theta_log_oe,
+                                 tvalue = pooled_se_log_oe[2],
+                                 se = pooled_se_log_oe[1])
+
+pooled_ci_sqrt_oe = pooled_ci(est = pooled_theta_sqrt_oe,
+                             tvalue = pooled_se_sqrt_oe[2],
+                             se = pooled_se_sqrt_oe[1])
 
 ######################################
 ## Back-transformation of O:E ratios to original scale
@@ -407,8 +464,8 @@ pooled_ciub_sqrt_oe = pooled_theta_sqrt_oe + pooled_se_sqrt_oe[2] * pooled_se_sq
 
 back_theta_regular_oe = pooled_theta_regular_oe
 back_se_regular_oe = pooled_se_regular_oe[1]
-back_cilb_regular_oe = pooled_cilb_regular_oe
-back_ciub_regular_oe = pooled_ciub_regular_oe
+back_cilb_regular_oe = pooled_ci_regular_oe[1]
+back_ciub_regular_oe = pooled_ci_regular_oe[2]
 
 final_regular_oe = cbind(back_theta_regular_oe, 
                           back_se_regular_oe, 
@@ -418,8 +475,8 @@ final_regular_oe = cbind(back_theta_regular_oe,
 
 back_theta_log_oe = exp(pooled_theta_log_oe)
 back_se_log_oe = exp(pooled_se_log_oe[1])
-back_cilb_log_oe = exp(pooled_cilb_log_oe)
-back_ciub_log_oe = exp(pooled_ciub_log_oe)
+back_cilb_log_oe = exp(pooled_ci_log_oe[1])
+back_ciub_log_oe = exp(pooled_ci_log_oe[2])
 
 final_log_oe = cbind(back_theta_log_oe, 
                           back_se_log_oe, 
@@ -429,8 +486,8 @@ final_log_oe = cbind(back_theta_log_oe,
 
 back_theta_sqrt_oe =(pooled_theta_sqrt_oe)^2
 back_se_sqrt_oe = (pooled_se_sqrt_oe[1])^2
-back_cilb_sqrt_oe = (pooled_cilb_sqrt_oe)^2
-back_ciub_sqrt_oe = (pooled_ciub_sqrt_oe)^2
+back_cilb_sqrt_oe = (pooled_ci_sqrt_oe[1])^2
+back_ciub_sqrt_oe = (pooled_ci_sqrt_oe[2])^2
 
 final_sqrt_oe = cbind(back_theta_sqrt_oe, 
                           back_se_sqrt_oe, 
@@ -441,12 +498,23 @@ final_sqrt_oe = cbind(back_theta_sqrt_oe,
 ######################################
 ## Compare performance of O:E measures with reference O:E measure
 ######################################
-
 # Show results
-reference_oe
-final_regular_oe
-final_log_oe
-final_sqrt_oe
+true_oe_ratio <- as.list(reference_oe)[1:4]
+
+rownames(final_regular_oe) <- ("regular o:e ratio")
+rownames(final_log_oe) <- ("log o:e ratio")
+rownames(final_sqrt_oe) <- ("square root o:e ratio")
+
+colnames(final_regular_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+colnames(final_log_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+colnames(final_sqrt_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+
+oe_comparison = rbind(true_oe_ratio, 
+                      final_regular_oe, 
+                      final_log_oe, 
+                      final_sqrt_oe
+                      )
+oe_comparison = as.data.frame(oe_comparison)
 
 # Check if reference O:E lies in the 95% CI of the pooled O:E measure
 isTRUE(final_regular_oe[3] < reference_oe$theta & reference_oe$theta < final_regular_oe[4])
