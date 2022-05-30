@@ -3,12 +3,9 @@
 ######################################
 # TO DO
 # Change predictor variable to binary?
-# Check for convergence. Update if full convergence. tbd. Pattern? No? Good.
 # Increase percent of missingness, because results too precise
-# Increase imp iterations
-# Calculate Coverage rate
+# Include different CI-levels
 # Visualize results
-# Reference O:E based on complete data, based on split data or exactly 1 (max likelihood)?
 ######################################
 
 ######################################
@@ -60,12 +57,19 @@ package.check <- lapply(
 ## Set seed to get reproducible results
 set.seed(18)
 
+## Set amount of study repetition
+rep_amount = c(10)
+
 ## Initialize lists for results
-results_boolean = list()
-results_table = list()
+result_per_sim = list()
+result_table = list()
+result_boolean_regular = vector()
+result_boolean_log = vector()
+result_boolean_sqrt = vector()
+
 
 ## Loop for repetition of study
-for (j in 1:10){
+for (j in 1:rep_amount){
   
   # Choose sample size 
   n_sample = c(2000)
@@ -87,6 +91,7 @@ for (j in 1:10){
   prob_outcome = 1/(1+exp(-lin_combination))
   
   # Check that values are not approaching either 0 or 1 to avoid too deterministic approach
+  # too close to zero?
   summary(prob_outcome)
   
   # Binary outcome variable as Bernoulli response variable
@@ -149,7 +154,7 @@ for (j in 1:10){
   ######################################
   
   # Define parameters for amputation
-  myprop = c(0.15) # Choose percentage of missing cells (define reasonably between 0.1 and 0.2)
+  myprop = c(0.3) # Choose percentage of missing cells (define reasonably between 0.1 and 0.2)
   mypattern = rbind(c(0, 0, 1), c(1, 0 ,1), c(0, 1, 1)) # Choose missingness pattern (0 == missing, 1 == non-missing)
   myfreq = c(0.1, 0.45, 0.45) # Choose relative occurence of these patterns
   mymech = c("MAR") # Choose missingness mechanism (MAR based on literature)
@@ -190,7 +195,7 @@ for (j in 1:10){
                       family = binomial
   )
   
-  # Compare
+  # Compare coefficients of amputed model vs. coefficients of complete model
   summary(model_amputed)$coef
   summary(model_complete)$coef
   
@@ -202,7 +207,7 @@ for (j in 1:10){
   imp_amount = c(10)
   
   # Choose number of iterations
-  imp_iteration = c(1)
+  imp_iteration = c(20)
   
   # Choose imputation method
   # Interpretation: pmm default method for numeric data; logreg method for binary data
@@ -220,9 +225,16 @@ for (j in 1:10){
                 seed = 18
                 )
   
+  # Inspect convergence
+  plot(imputation)
+  
   # Save the imputed data sets
   # Note: alternative save as list of df
   imputed_all = complete(imputation, "long")
+  
+  ######################################
+  ## Fit models and calculate (transformed) O:E ratios based on imputed data sets
+  ######################################
   
   # Initialize lists for O:E ratios based on imputed data sets
   regular_oe_list = list()
@@ -297,10 +309,14 @@ for (j in 1:10){
   ######################################
   
   # Function to pool standard errors and receive respective t-values
+  # Source: Epi and Big Data course
+  # Note: Write new with less redundance as some variables already defined
   pooled_se <- function(est, se, n.imp){
     Qbar <- mean(est)
-    U <- sum(se**2)/n.imp # within-variance
-    B <- sum((est - Qbar)**2)/(n.imp-1) # between variance
+    # within-variance
+    U <- sum(se**2)/n.imp 
+    # between variance
+    B <- sum((est - Qbar)**2)/(n.imp-1) 
     se_total <- sqrt(U + (1+1/n.imp)*B)
     r <- (1 + 1 / n.imp) * (B / U)
     v <- (n.imp - 1) * (1 + (1/r))^2
@@ -354,52 +370,39 @@ for (j in 1:10){
   ## Back-transformation of O:E ratios to original scale
   ######################################
   
-  back_theta_regular_oe = pooled_theta_regular_oe
-  back_se_regular_oe = pooled_se_regular_oe[1]
-  back_cilb_regular_oe = pooled_ci_regular_oe[1]
-  back_ciub_regular_oe = pooled_ci_regular_oe[2]
+  final_regular_oe = cbind(
+    back_theta_regular_oe = pooled_theta_regular_oe,
+    back_se_regular_oe = pooled_se_regular_oe[1],
+    back_cilb_regular_oe = pooled_ci_regular_oe[1],
+    back_ciub_regular_oe = pooled_ci_regular_oe[2]
+    )
+  colnames(final_regular_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+  rownames(final_regular_oe) <- ("regular o:e ratio")
   
-  final_regular_oe = cbind(back_theta_regular_oe, 
-                            back_se_regular_oe, 
-                            back_cilb_regular_oe, 
-                            back_ciub_regular_oe
-                            )
-  
-  back_theta_log_oe = exp(pooled_theta_log_oe)
-  back_se_log_oe = exp(pooled_se_log_oe[1])
-  back_cilb_log_oe = exp(pooled_ci_log_oe[1])
-  back_ciub_log_oe = exp(pooled_ci_log_oe[2])
-  
-  final_log_oe = cbind(back_theta_log_oe, 
-                            back_se_log_oe, 
-                            back_cilb_log_oe, 
-                            back_ciub_log_oe
-                       )
-  
-  back_theta_sqrt_oe =(pooled_theta_sqrt_oe)^2
-  back_se_sqrt_oe = (pooled_se_sqrt_oe[1])^2
-  back_cilb_sqrt_oe = (pooled_ci_sqrt_oe[1])^2
-  back_ciub_sqrt_oe = (pooled_ci_sqrt_oe[2])^2
-  
-  final_sqrt_oe = cbind(back_theta_sqrt_oe, 
-                            back_se_sqrt_oe, 
-                            back_cilb_sqrt_oe, 
-                            back_ciub_sqrt_oe
-                            )
+  final_log_oe = cbind(
+    back_theta_log_oe = exp(pooled_theta_log_oe), 
+    back_se_log_oe = exp(pooled_se_log_oe[1]),
+    back_cilb_log_oe = exp(pooled_ci_log_oe[1]), 
+    back_ciub_log_oe = exp(pooled_ci_log_oe[2])
+    )
+  colnames(final_log_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+  rownames(final_log_oe) <- ("log o:e ratio")
+
+  final_sqrt_oe = cbind(
+    back_theta_sqrt_oe =(pooled_theta_sqrt_oe)^2, 
+    back_se_sqrt_oe = (pooled_se_sqrt_oe[1])^2, 
+    back_cilb_sqrt_oe = (pooled_ci_sqrt_oe[1])^2, 
+    back_ciub_sqrt_oe = (pooled_ci_sqrt_oe[2])^2
+    )
+  colnames(final_sqrt_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+  rownames(final_sqrt_oe) <- ("square root o:e ratio")
   
   ######################################
   ## Compare performance of O:E measures with reference O:E measure
   ######################################
-  # Show results
+  
+  # Results Table: Comparison of theta, theta.se and CI of different transformations
   true_oe_ratio <- as.list(reference_oe)[1:4]
-  
-  rownames(final_regular_oe) <- ("regular o:e ratio")
-  rownames(final_log_oe) <- ("log o:e ratio")
-  rownames(final_sqrt_oe) <- ("square root o:e ratio")
-  
-  colnames(final_regular_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
-  colnames(final_log_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
-  colnames(final_sqrt_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
   
   oe_comparison = rbind(true_oe_ratio, 
                         final_regular_oe, 
@@ -408,23 +411,44 @@ for (j in 1:10){
                         )
   oe_comparison = as.data.frame(oe_comparison)
   
-  # Check if reference O:E lies in the 95% CI of the pooled O:E measure
+  # Results Boolean vector: Check if reference O:E lies in the 95% CI of the pooled O:E measure
   res_regular = isTRUE(final_regular_oe[3] < reference_oe$theta & reference_oe$theta < final_regular_oe[4])
   res_log = isTRUE(final_log_oe[3] < reference_oe$theta & reference_oe$theta < final_log_oe[4])
   res_sqrt = isTRUE(final_sqrt_oe[3] < reference_oe$theta & reference_oe$theta < final_sqrt_oe[4])
   
-  # Visualize results
+  # Results Visualization:
   # tbd
   
-  # Display results for study repetition
-  results_boolean[[j]] = c(res_regular, res_log, res_sqrt)
-  results_table[[j]] = oe_comparison
+  ######################################
+  ## Study repetition
+  ######################################
   
-  ######################################
-  ## "Robustness check" with complete case analysis
-  ######################################
-  # Testing: As data are missing MAR in the simulation study, they should be less biased compared to complete case analysis
+  # Save results for study repetition
+  result_table[[j]] = oe_comparison
+  result_per_sim[[j]] = c(res_regular, res_log, res_sqrt)
+  result_boolean_regular[[j]] = c(res_regular)
+  result_boolean_log[[j]] = c(res_log)
+  result_boolean_sqrt[[j]] = c(res_sqrt)
+  
 }
-print(results_boolean)
-print(results_table)
 
+######################################
+## Across study repetitions: Percentage of how often true O:E falls into 95% CI of respective O:E measure 
+######################################
+
+# Print tables of each round
+print(result_table)
+# print(result_per_sim)
+# print(result_boolean_regular)
+# print(result_boolean_log)
+# print(result_boolean_sqrt)
+
+# Interpretation: Percentage of how often true O:E falls into 95% CI of respective O:E measure 
+percentage_coverage_regular = table(result_boolean_regular)["TRUE"]/rep_amount*100
+percentage_coverage_log = table(result_boolean_log)["TRUE"]/rep_amount*100
+percentage_coverage_sqrt = table(result_boolean_sqrt)["TRUE"]/rep_amount*100
+ 
+# Print percentage of coverage
+percentage_coverage_regular
+percentage_coverage_log
+percentage_coverage_sqrt
