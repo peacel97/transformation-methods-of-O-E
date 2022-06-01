@@ -55,10 +55,10 @@ package.check <- lapply(
 ######################################
 
 ## Set seed to get reproducible results
-set.seed(18)
+set.seed(15)
 
 ## Set amount of study repetition
-rep_amount = c(10)
+rep_amount = c(5)
 
 ## Initialize lists for results
 result_per_sim = list()
@@ -154,9 +154,9 @@ for (j in 1:rep_amount){
   ######################################
   
   # Define parameters for amputation
-  myprop = c(0.3) # Choose percentage of missing cells (define reasonably between 0.1 and 0.2)
+  myprop = c(0.3) # Choose percentage of missing cells
   mypattern = rbind(c(0, 0, 1), c(1, 0 ,1), c(0, 1, 1)) # Choose missingness pattern (0 == missing, 1 == non-missing)
-  myfreq = c(0.1, 0.45, 0.45) # Choose relative occurence of these patterns
+  myfreq = c(0.3, 0.35, 0.35) # Choose relative occurence of these patterns
   mymech = c("MAR") # Choose missingness mechanism (MAR based on literature)
   myweights = ampute.default.weights(mypattern, mymech) # Choose weights of weighted sum scores
   
@@ -211,7 +211,8 @@ for (j in 1:rep_amount){
   
   # Choose imputation method
   # Interpretation: pmm default method for numeric data; logreg method for binary data
-  imp_method = c("pmm", "pmm", "logreg") 
+  # change to norm for smaller CI in results
+  imp_method = c("norm", "norm", "logreg") 
   
   # Outcome variable as categorical variable for imp_method logreg
   df_amputed$outcome_var <- as.factor(df_amputed$outcome_var)
@@ -373,28 +374,28 @@ for (j in 1:rep_amount){
   final_regular_oe = cbind(
     back_theta_regular_oe = pooled_theta_regular_oe,
     back_se_regular_oe = pooled_se_regular_oe[1],
-    back_cilb_regular_oe = pooled_ci_regular_oe[1],
-    back_ciub_regular_oe = pooled_ci_regular_oe[2]
+    back_cilb_regular_oe = pooled_theta_regular_oe - pooled_se_regular_oe[2]*pooled_se_regular_oe[1],
+    back_ciub_regular_oe = pooled_theta_regular_oe + pooled_se_regular_oe[2]*pooled_se_regular_oe[1]
     )
-  colnames(final_regular_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+  colnames(final_regular_oe) <- c("theta", "theta.se", "theta.cilb", "theta.ciub")
   rownames(final_regular_oe) <- ("regular o:e ratio")
   
   final_log_oe = cbind(
     back_theta_log_oe = exp(pooled_theta_log_oe), 
-    back_se_log_oe = exp(pooled_se_log_oe[1]),
-    back_cilb_log_oe = exp(pooled_ci_log_oe[1]), 
-    back_ciub_log_oe = exp(pooled_ci_log_oe[2])
+    back_se_log_oe = pooled_se_log_oe[1], #exp(pooled_se_log_oe[1]),
+    back_cilb_log_oe = exp(pooled_theta_log_oe - pooled_se_log_oe[2]*pooled_se_log_oe[1]),
+    back_ciub_log_oe = exp(pooled_theta_log_oe + pooled_se_log_oe[2]*pooled_se_log_oe[1])
     )
-  colnames(final_log_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+  colnames(final_log_oe) <- c("theta", "theta.se", "theta.cilb", "theta.ciub")
   rownames(final_log_oe) <- ("log o:e ratio")
 
   final_sqrt_oe = cbind(
     back_theta_sqrt_oe =(pooled_theta_sqrt_oe)^2, 
-    back_se_sqrt_oe = (pooled_se_sqrt_oe[1])^2, 
-    back_cilb_sqrt_oe = (pooled_ci_sqrt_oe[1])^2, 
-    back_ciub_sqrt_oe = (pooled_ci_sqrt_oe[2])^2
+    back_se_sqrt_oe = pooled_se_sqrt_oe[1], #(pooled_se_sqrt_oe[1])^2, 
+    back_cilb_sqrt_oe = (pooled_theta_sqrt_oe - pooled_se_sqrt_oe[2]*pooled_se_sqrt_oe[1])^2,
+    back_ciub_sqrt_oe = (pooled_theta_sqrt_oe + pooled_se_sqrt_oe[2]*pooled_se_sqrt_oe[1])^2
     )
-  colnames(final_sqrt_oe) <- c("theta", "theta.se", "theta.cilb", "theta.cuib")
+  colnames(final_sqrt_oe) <- c("theta", "theta.se", "theta.cilb", "theta.ciub")
   rownames(final_sqrt_oe) <- ("square root o:e ratio")
   
   ######################################
@@ -447,8 +448,10 @@ print(result_table)
 percentage_coverage_regular = table(result_boolean_regular)["TRUE"]/rep_amount*100
 percentage_coverage_log = table(result_boolean_log)["TRUE"]/rep_amount*100
 percentage_coverage_sqrt = table(result_boolean_sqrt)["TRUE"]/rep_amount*100
- 
+
 # Print percentage of coverage
 percentage_coverage_regular
 percentage_coverage_log
 percentage_coverage_sqrt
+
+# ###############################
