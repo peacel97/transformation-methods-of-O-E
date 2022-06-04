@@ -3,7 +3,6 @@
 ######################################
 # TO DO
 # Change predictor variable to binary?
-# Increase percent of missingness, because results too precise
 # Include different CI-levels
 # Visualize results
 ######################################
@@ -74,13 +73,11 @@ for (j in 1:rep_amount){
   n_sample = c(1000)
 
   # Continuous predictor variables
-  continuous_var_1_train = rnorm(n = n_sample, mean = 2.5, sd = 0.7)
-  continuous_var_1_test = rnorm(n = n_sample, mean = 1.5, sd = 0.4)
+  continuous_var_1 = rnorm(n = n_sample, mean = 2, sd = 0.5)
   summary(continuous_var_1)
   #hist(continuous_var_1)
   
-  continuous_var_2_train = rnorm(n = n_sample, mean = 2, sd = 0.5)
-  continuous_var_2_test = rnorm(n = n_sample, mean = 3, sd = 1)
+  continuous_var_2 = rnorm(n = n_sample, mean = 1.5, sd = 0.25)
   summary(continuous_var_2)
   #hist(continuous_var_2)
   
@@ -102,20 +99,20 @@ for (j in 1:rep_amount){
   # Note: Imbalanced Classification, desired probability for outcome_var = 1 between 20% and 30%
   outcome_var_train = rbinom(n = n_sample, size = 1, prob = prob_outcome_train)
   outcome_var_test = rbinom(n = n_sample, size = 1, prob = prob_outcome_test)
-  summary(outcome_var)
-  summary(outcome_var)
+  #summary(outcome_var)
+  #summary(outcome_var)
   #hist(outcome_var)
   
   # Combine it to a data frame
   train_data_complete = data.frame(
-              continuous_var_1 = continuous_var_1_train,
-              continuous_var_2 = continuous_var_2_train,
+              continuous_var_1,
+              continuous_var_2,
               outcome_var = outcome_var_train
               )
   
   test_data_complete = data.frame(
-    continuous_var_1 = continuous_var_1_test,
-    continuous_var_2 = continuous_var_2_test,
+    continuous_var_1,
+    continuous_var_2,
     outcome_var = outcome_var_test
   )
 
@@ -138,20 +135,22 @@ for (j in 1:rep_amount){
   )
   summary(model_complete)$coef
   
-  ######################################
-  ## Calculate reference O:E ratio based on logistic regression model with complete data
-  ######################################
+  # # Fit model based on complete data
+  # fit_model_complete <- model_complete %>% predict(test_data_complete,
+  #                                                  type = "response"
+  # )
+  # # Predicted probability
+  # summary(fit_model_complete)
   
-  # Fit model based on complete data
-  fit_model_complete <- model_complete %>% predict(test_data_complete,
-                                                   type = "response"
-                                                   )
-  # Predicted probability
-  summary(fit_model_complete)
+  ######################################
+  ## Calculate theoretical true O:E ratio
+  ######################################
   
   # Define observed and expected events based on complete data
-  n_observed_event = sum(train_data_complete$outcome_var == 1)
-  n_expected_event = mean(fit_model_complete)*n_sample
+  sum(train_data_complete$outcome_var == 1)
+  sum(test_data_complete$outcome_var == 1)
+  n_observed_event = sum(test_data_complete$outcome_var == 1) #sum(test_data_complete$outcome_var == 1)
+  n_expected_event = sum(train_data_complete$outcome_var == 1)#mean(fit_model_complete)*n_sample
   
   # O:E ratio with expected event calculated based on predicted probabilities
   reference_oe = oecalc(
@@ -269,20 +268,20 @@ for (j in 1:rep_amount){
     # Calculate regular O:E and save it to list
     regular_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
-      E = mean(fit_imp)*n_sample*split_prob,
+      E = mean(fit_imp)*n_sample, #*split_prob,
       N = nrow(subset_imputed)
     )
     # Calculate log O:E and save it to list
     log_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
-      E = mean(fit_imp)*n_sample*split_prob,
+      E = mean(fit_imp)*n_sample, #*split_prob,
       N = nrow(subset_imputed),
       g = "log(OE)"
     )
     # Calculate square root O:E and save it to list
     sqrt_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
-      E = mean(fit_imp)*n_sample*split_prob,
+      E = mean(fit_imp)*n_sample, #*split_prob,
       N = nrow(subset_imputed),
       g = "sqrt(OE)"
     )
