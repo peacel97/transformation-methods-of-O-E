@@ -67,13 +67,12 @@ result_boolean_regular = vector()
 result_boolean_log = vector()
 result_boolean_sqrt = vector()
 
-
 ## Loop for repetition of study
 for (j in 1:rep_amount){
   
-  # Choose sample size 
+  # Choose sample size
   n_sample = c(2000)
-  
+
   # Continuous predictor variables
   continuous_var_1 = rnorm(n = n_sample, mean = 2.0, sd = 0.5)
   summary(continuous_var_1)
@@ -84,41 +83,46 @@ for (j in 1:rep_amount){
   #hist(continuous_var_2)
   
   # Create linear combination of predictor variables and intercept
-  lin_combination = -4.5 + continuous_var_1 + continuous_var_2
+  lin_combination_train = -4.5 + continuous_var_1 + continuous_var_2
+  lin_combination_test = -4 + continuous_var_1 + continuous_var_2
   
   # Probability for response variable to be 1
   # Note: Due to application for logistic regression, use inverse logit function
-  prob_outcome = 1/(1+exp(-lin_combination))
+  prob_outcome_train = 1/(1+exp(-lin_combination_train))
+  prob_outcome_test = 1/(1+exp(-lin_combination_test))
   
   # Check that values are not approaching either 0 or 1 to avoid too deterministic approach
   # too close to zero?
-  summary(prob_outcome)
+  summary(prob_outcome_train)
+  summary(prob_outcome_test)
   
   # Binary outcome variable as Bernoulli response variable
   # Note: Imbalanced Classification, desired probability for outcome_var = 1 between 20% and 30%
-  outcome_var = rbinom(n = n_sample, size = 1, prob = prob_outcome)
-  summary(outcome_var)
+  outcome_var_train = rbinom(n = n_sample, size = 1, prob = prob_outcome_train)
+  outcome_var_test = rbinom(n = n_sample, size = 1, prob = prob_outcome_test)
+  summary(outcome_var_train)
+  summary(outcome_var_test)
   #hist(outcome_var)
   
   # Combine it to a data frame
-  df_complete = data.frame( 
-             continuous_var_1,
-             continuous_var_2,
-             outcome_var
-             )
-  
+  df_complete = data.frame(
+              continuous_var_1,
+              continuous_var_2,
+              outcome_var_train
+              )
+
   ######################################
   ## Split data and develop prediction model
   ######################################
   
-  ## Split data into test and training data
+  # Split data into test and training data
   split_prob = c(0.5)
-  training_samples_complete <- df_complete$outcome_var %>% 
+  training_samples_complete <- df_complete$outcome_var %>%
     createDataPartition(p = split_prob, list = FALSE)
   
   train_data_complete = df_complete[training_samples_complete, ]
   test_data_complete = df_complete[-training_samples_complete, ]
-  
+
   # Create multiple logistic regression model based on complete data
   model_complete = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
                        data = train_data_complete,
@@ -212,7 +216,7 @@ for (j in 1:rep_amount){
   # Choose imputation method
   # Interpretation: pmm default method for numeric data; logreg method for binary data
   # change to norm for smaller CI in results
-  imp_method = c("norm", "norm", "logreg") 
+  imp_method = c("pmm", "pmm", "logreg") 
   
   # Outcome variable as categorical variable for imp_method logreg
   df_amputed$outcome_var <- as.factor(df_amputed$outcome_var)
@@ -454,4 +458,4 @@ percentage_coverage_regular
 percentage_coverage_log
 percentage_coverage_sqrt
 
-# ###############################
+################################
