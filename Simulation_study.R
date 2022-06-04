@@ -71,14 +71,16 @@ result_boolean_sqrt = vector()
 for (j in 1:rep_amount){
   
   # Choose sample size
-  n_sample = c(2000)
+  n_sample = c(1000)
 
   # Continuous predictor variables
-  continuous_var_1 = rnorm(n = n_sample, mean = 2.0, sd = 0.5)
+  continuous_var_1_train = rnorm(n = n_sample, mean = 2.5, sd = 0.7)
+  continuous_var_1_test = rnorm(n = n_sample, mean = 1.5, sd = 0.4)
   summary(continuous_var_1)
   #hist(continuous_var_1)
   
-  continuous_var_2 = rnorm(n = n_sample, mean = 1.5, sd = 0.25)
+  continuous_var_2_train = rnorm(n = n_sample, mean = 2, sd = 0.5)
+  continuous_var_2_test = rnorm(n = n_sample, mean = 3, sd = 1)
   summary(continuous_var_2)
   #hist(continuous_var_2)
   
@@ -100,28 +102,34 @@ for (j in 1:rep_amount){
   # Note: Imbalanced Classification, desired probability for outcome_var = 1 between 20% and 30%
   outcome_var_train = rbinom(n = n_sample, size = 1, prob = prob_outcome_train)
   outcome_var_test = rbinom(n = n_sample, size = 1, prob = prob_outcome_test)
-  summary(outcome_var_train)
-  summary(outcome_var_test)
+  summary(outcome_var)
+  summary(outcome_var)
   #hist(outcome_var)
   
   # Combine it to a data frame
-  df_complete = data.frame(
-              continuous_var_1,
-              continuous_var_2,
-              outcome_var_train
+  train_data_complete = data.frame(
+              continuous_var_1 = continuous_var_1_train,
+              continuous_var_2 = continuous_var_2_train,
+              outcome_var = outcome_var_train
               )
+  
+  test_data_complete = data.frame(
+    continuous_var_1 = continuous_var_1_test,
+    continuous_var_2 = continuous_var_2_test,
+    outcome_var = outcome_var_test
+  )
 
   ######################################
   ## Split data and develop prediction model
   ######################################
   
   # Split data into test and training data
-  split_prob = c(0.5)
-  training_samples_complete <- df_complete$outcome_var %>%
-    createDataPartition(p = split_prob, list = FALSE)
-  
-  train_data_complete = df_complete[training_samples_complete, ]
-  test_data_complete = df_complete[-training_samples_complete, ]
+  # split_prob = c(0.5)
+  # training_samples_complete <- df_complete$outcome_var %>%
+  #   createDataPartition(p = split_prob, list = FALSE)
+  # 
+  # train_data_complete = df_complete[training_samples_complete, ]
+  # test_data_complete = df_complete[-training_samples_complete, ]
 
   # Create multiple logistic regression model based on complete data
   model_complete = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
@@ -142,14 +150,14 @@ for (j in 1:rep_amount){
   summary(fit_model_complete)
   
   # Define observed and expected events based on complete data
-  n_observed_event = sum(df_complete$outcome_var == 1)
+  n_observed_event = sum(train_data_complete$outcome_var == 1)
   n_expected_event = mean(fit_model_complete)*n_sample
   
   # O:E ratio with expected event calculated based on predicted probabilities
   reference_oe = oecalc(
     O = n_observed_event, # numeric vector of observed events
     E = n_expected_event, # numeric vector of expected events
-    N = nrow(df_complete)
+    N = nrow(train_data_complete)
   )
   reference_oe
   
