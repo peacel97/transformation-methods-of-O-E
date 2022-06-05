@@ -265,6 +265,7 @@ for (j in 1:rep_amount){
     fit_imp = model_complete %>% predict(subset_imputed, 
                                type = "response")
     summary(fit_imp)
+    
     # Calculate regular O:E and save it to list
     regular_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
@@ -332,8 +333,10 @@ for (j in 1:rep_amount){
     se_total <- sqrt(U + (1+1/n.imp)*B)
     r <- (1 + 1 / n.imp) * (B / U)
     v <- (n.imp - 1) * (1 + (1/r))^2
-    t <- qt(0.975, v)
-    res <- c(se_total, t)
+    t_90 <- qt(0.950, v)
+    t_95 <- qt(0.975, v)
+    t_99 <- qt(0.995, v)
+    res <- c(se_total, t_90, t_95, t_99)
     return(res)
   }
   
@@ -365,17 +368,18 @@ for (j in 1:rep_amount){
     return(ci)
   }
   
+  #for (i in 1:imp_amount){
   # Pool the confidence intervals of the o:e estimates (theta.cilb and theta.ciub)
   pooled_ci_regular_oe = pooled_ci(est = pooled_theta_regular_oe,
-                                     tvalue = pooled_se_regular_oe[2],
+                                     tvalue = pooled_se_regular_oe[3],
                                      se = pooled_se_regular_oe[1])
   
   pooled_ci_log_oe = pooled_ci(est = pooled_theta_log_oe,
-                                   tvalue = pooled_se_log_oe[2],
+                                   tvalue = pooled_se_log_oe[3],
                                    se = pooled_se_log_oe[1])
   
   pooled_ci_sqrt_oe = pooled_ci(est = pooled_theta_sqrt_oe,
-                               tvalue = pooled_se_sqrt_oe[2],
+                               tvalue = pooled_se_sqrt_oe[3],
                                se = pooled_se_sqrt_oe[1])
   
   ######################################
@@ -385,8 +389,8 @@ for (j in 1:rep_amount){
   final_regular_oe = cbind(
     back_theta_regular_oe = pooled_theta_regular_oe,
     back_se_regular_oe = pooled_se_regular_oe[1],
-    back_cilb_regular_oe = pooled_theta_regular_oe - pooled_se_regular_oe[2]*pooled_se_regular_oe[1],
-    back_ciub_regular_oe = pooled_theta_regular_oe + pooled_se_regular_oe[2]*pooled_se_regular_oe[1]
+    back_cilb_regular_oe = pooled_theta_regular_oe - pooled_se_regular_oe[3]*pooled_se_regular_oe[1],
+    back_ciub_regular_oe = pooled_theta_regular_oe + pooled_se_regular_oe[3]*pooled_se_regular_oe[1]
     )
   colnames(final_regular_oe) <- c("theta", "theta.se", "theta.cilb", "theta.ciub")
   rownames(final_regular_oe) <- ("regular o:e ratio")
@@ -394,8 +398,8 @@ for (j in 1:rep_amount){
   final_log_oe = cbind(
     back_theta_log_oe = exp(pooled_theta_log_oe), 
     back_se_log_oe = pooled_se_log_oe[1], #exp(pooled_se_log_oe[1]),
-    back_cilb_log_oe = exp(pooled_theta_log_oe - pooled_se_log_oe[2]*pooled_se_log_oe[1]),
-    back_ciub_log_oe = exp(pooled_theta_log_oe + pooled_se_log_oe[2]*pooled_se_log_oe[1])
+    back_cilb_log_oe = exp(pooled_theta_log_oe - pooled_se_log_oe[3]*pooled_se_log_oe[1]),
+    back_ciub_log_oe = exp(pooled_theta_log_oe + pooled_se_log_oe[3]*pooled_se_log_oe[1])
     )
   colnames(final_log_oe) <- c("theta", "theta.se", "theta.cilb", "theta.ciub")
   rownames(final_log_oe) <- ("log o:e ratio")
@@ -403,8 +407,8 @@ for (j in 1:rep_amount){
   final_sqrt_oe = cbind(
     back_theta_sqrt_oe =(pooled_theta_sqrt_oe)^2, 
     back_se_sqrt_oe = pooled_se_sqrt_oe[1], #(pooled_se_sqrt_oe[1])^2, 
-    back_cilb_sqrt_oe = (pooled_theta_sqrt_oe - pooled_se_sqrt_oe[2]*pooled_se_sqrt_oe[1])^2,
-    back_ciub_sqrt_oe = (pooled_theta_sqrt_oe + pooled_se_sqrt_oe[2]*pooled_se_sqrt_oe[1])^2
+    back_cilb_sqrt_oe = (pooled_theta_sqrt_oe - pooled_se_sqrt_oe[3]*pooled_se_sqrt_oe[1])^2,
+    back_ciub_sqrt_oe = (pooled_theta_sqrt_oe + pooled_se_sqrt_oe[3]*pooled_se_sqrt_oe[1])^2
     )
   colnames(final_sqrt_oe) <- c("theta", "theta.se", "theta.cilb", "theta.ciub")
   rownames(final_sqrt_oe) <- ("square root o:e ratio")
@@ -413,7 +417,7 @@ for (j in 1:rep_amount){
   ## Compare performance of O:E measures with reference O:E measure
   ######################################
   
-  # Results Table: Comparison of theta, theta.se and CI of different transformations
+  # Results Table for 95% CI: Comparison of theta, theta.se and CI of different transformations
   true_oe_ratio <- as.list(reference_oe)[1:4]
   
   oe_comparison = rbind(true_oe_ratio, 
@@ -423,13 +427,11 @@ for (j in 1:rep_amount){
                         )
   oe_comparison = as.data.frame(oe_comparison)
   
-  # Results Boolean vector: Check if reference O:E lies in the 95% CI of the pooled O:E measure
+  # Boolean vector Results for 95% CI: Check if reference O:E lies in the 95% CI of the pooled O:E measure
   res_regular = isTRUE(final_regular_oe[3] < reference_oe$theta & reference_oe$theta < final_regular_oe[4])
   res_log = isTRUE(final_log_oe[3] < reference_oe$theta & reference_oe$theta < final_log_oe[4])
   res_sqrt = isTRUE(final_sqrt_oe[3] < reference_oe$theta & reference_oe$theta < final_sqrt_oe[4])
   
-  # Results Visualization:
-  # tbd
   
   ######################################
   ## Study repetition
@@ -466,3 +468,6 @@ percentage_coverage_log
 percentage_coverage_sqrt
 
 ################################
+
+# Results Visualization:
+# tbd
