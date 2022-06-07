@@ -5,7 +5,6 @@
 # Change predictor variable to binary?
 # Include different CI-levels
 # Visualize results
-# Lasse ich den std error unberüher bei back transformation?
 ######################################
 
 ######################################
@@ -58,7 +57,7 @@ package.check <- lapply(
 set.seed(15)
 
 ## Set amount of study repetition
-rep_amount = c(1)
+rep_amount = c(50)
 
 ## Initialize lists for results
 result_table_90 = list()
@@ -178,7 +177,7 @@ for (j in 1:rep_amount){
   
   # Define parameters for amputation
   myprop = c(0.3) # Choose percentage of missing cells
-  mypattern = rbind(c(0, 0, 1), c(1, 0 ,1), c(0, 1, 1)) # Choose missingness pattern (0 == missing, 1 == non-missing)
+  mypattern = rbind(c(0, 0, 1), c(1, 0 ,1), c(0, 1, 0)) # Choose missingness pattern (0 == missing, 1 == non-missing)
   myfreq = c(0.3, 0.35, 0.35) # Choose relative occurence of these patterns
   mymech = c("MAR") # Choose missingness mechanism (MAR based on literature)
   myweights = ampute.default.weights(mypattern, mymech) # Choose weights of weighted sum scores
@@ -284,6 +283,7 @@ for (j in 1:rep_amount){
       E = mean(fit_imp)*n_sample, #*split_prob,
       N = nrow(subset_imputed)
     )
+    
     # Calculate log O:E and save it to list
     log_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
@@ -301,13 +301,14 @@ for (j in 1:rep_amount){
   }
   
   ######################################
-  ## Pooling procedure: Pool estimates
+  ## Pooling procedure
   ######################################
   
   # Initialize vectors for theta and theta.se
   regular_theta <- vector()
   log_theta <- vector()
   sqrt_theta <- vector()
+  
   regular_theta_se <- vector()
   log_theta_se <- vector()
   sqrt_theta_se <- vector()
@@ -328,10 +329,6 @@ for (j in 1:rep_amount){
   pooled_theta_regular_oe = mean(regular_theta)
   pooled_theta_log_oe = mean(log_theta)
   pooled_theta_sqrt_oe = mean(sqrt_theta)
-  
-  ######################################
-  ## Pooling procedure: Pool standard errors
-  ######################################
   
   # Function to pool standard errors and receive respective t-values
   # Source: Epi and Big Data course
@@ -369,16 +366,8 @@ for (j in 1:rep_amount){
                                 )
   
   ######################################
-  ## Pooling procedure: Pool Confidence intervals
+  ## Back-transformation of O:E ratios to original scale
   ######################################
-  
-  # Function to calculate confidence interval
-  pooled_ci <- function(est, se, tvalue){
-    theta.cilb <- est - tvalue * se
-    theta.ciub <- est + tvalue * se
-    ci <- c(theta.cilb, theta.ciub)
-    return(ci)
-  }
   
   # Initialize
   #[2] == 90%CI, [3] == 95%CI, [4] == 99%CI
@@ -387,23 +376,6 @@ for (j in 1:rep_amount){
   final_sqrt_oe = list()
   
   for (k in 2:4){
-    # Pool the confidence intervals of the o:e estimates (theta.cilb and theta.ciub)
-    pooled_ci_regular_oe = pooled_ci(est = pooled_theta_regular_oe,
-                                       tvalue = pooled_se_regular_oe[k],
-                                       se = pooled_se_regular_oe[1])
-    
-    pooled_ci_log_oe = pooled_ci(est = pooled_theta_log_oe,
-                                     tvalue = pooled_se_log_oe[k],
-                                     se = pooled_se_log_oe[1])
-    
-    pooled_ci_sqrt_oe = pooled_ci(est = pooled_theta_sqrt_oe,
-                                 tvalue = pooled_se_sqrt_oe[k],
-                                 se = pooled_se_sqrt_oe[1])
-    
-    ######################################
-    ## Back-transformation of O:E ratios to original scale
-    ######################################
-    
     final_regular_oe[[k]] = cbind(
       theta = pooled_theta_regular_oe,
       theta.se = pooled_se_regular_oe[1],
@@ -425,8 +397,6 @@ for (j in 1:rep_amount){
       theta.ciub = (pooled_theta_sqrt_oe + pooled_se_sqrt_oe[k]*pooled_se_sqrt_oe[1])^2
       )
   }
-    
-  final_regular_oe[[2]][3]
   
   ######################################
   ## Compare performance of O:E measures with reference O:E measure
@@ -514,28 +484,29 @@ print(result_table_99)
 
 # Interpretation: Percentage of how often true O:E falls into 95% CI of respective O:E measure 
 percentage_coverage_regular_90 = table(result_boolean_regular_90)["TRUE"]/rep_amount*100
-percentage_coverage_regular_95 = table(result_boolean_regular_95)["TRUE"]/rep_amount*100
-percentage_coverage_regular_99 = table(result_boolean_regular_99)["TRUE"]/rep_amount*100
-
 percentage_coverage_log_90 = table(result_boolean_log_90)["TRUE"]/rep_amount*100
-percentage_coverage_log_95 = table(result_boolean_log_95)["TRUE"]/rep_amount*100
-percentage_coverage_log_99 = table(result_boolean_log_99)["TRUE"]/rep_amount*100
-
 percentage_coverage_sqrt_90 = table(result_boolean_sqrt_90)["TRUE"]/rep_amount*100
+
+
+percentage_coverage_regular_95 = table(result_boolean_regular_95)["TRUE"]/rep_amount*100
+percentage_coverage_log_95 = table(result_boolean_log_95)["TRUE"]/rep_amount*100
 percentage_coverage_sqrt_95 = table(result_boolean_sqrt_95)["TRUE"]/rep_amount*100
+
+percentage_coverage_regular_99 = table(result_boolean_regular_99)["TRUE"]/rep_amount*100
+percentage_coverage_log_99 = table(result_boolean_log_99)["TRUE"]/rep_amount*100
 percentage_coverage_sqrt_99 = table(result_boolean_sqrt_99)["TRUE"]/rep_amount*100
 
 # Print percentage of coverage
 percentage_coverage_regular_90
-percentage_coverage_regular_95
-percentage_coverage_regular_99
-
 percentage_coverage_log_90
-percentage_coverage_log_95
-percentage_coverage_log_99
-
 percentage_coverage_sqrt_90
+
+percentage_coverage_regular_95
+percentage_coverage_log_95
 percentage_coverage_sqrt_95
+
+percentage_coverage_regular_99
+percentage_coverage_log_99
 percentage_coverage_sqrt_99
 
 ################################
