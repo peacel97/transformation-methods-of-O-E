@@ -57,12 +57,10 @@ package.check <- lapply(
 set.seed(15)
 
 ## Set amount of study repetition
-rep_amount = c(50)
+rep_amount = c(2)
 
 ## Initialize lists for results
-result_table_90 = list()
-result_table_95 = list()
-result_table_99 = list()
+result_table = list()
 
 result_boolean_regular_90 = vector()
 result_boolean_regular_95 = vector()
@@ -75,7 +73,6 @@ result_boolean_log_99 = vector()
 result_boolean_sqrt_90 = vector()
 result_boolean_sqrt_95 = vector()
 result_boolean_sqrt_99 = vector()
-
 
 ## Loop for repetition of study
 for (j in 1:rep_amount){
@@ -345,7 +342,7 @@ for (j in 1:rep_amount){
     t_90 <- qt(0.950, v)
     t_95 <- qt(0.975, v)
     t_99 <- qt(0.995, v)
-    res <- c(se_total, t_90, t_95, t_99)
+    res <- c(t_90, t_95, t_99, se_total)
     return(res)
   }
   
@@ -369,104 +366,81 @@ for (j in 1:rep_amount){
   ## Back-transformation of O:E ratios to original scale
   ######################################
   
-  # Initialize
-  #[2] == 90%CI, [3] == 95%CI, [4] == 99%CI
-  final_regular_oe = list()
-  final_log_oe = list()
-  final_sqrt_oe = list()
+  # Loop over confidence intervals
+  # Initialize [1] == 90%CI, [2] == 95%CI, [3] == 99%CI
+  oe_comparison = list() 
+  res_regular = list()
+  res_log = list()
+  res_sqrt = list()
   
-  for (k in 2:4){
+  for (k in 1:3){
+    final_regular_oe = list()
+    final_log_oe = list()
+    final_sqrt_oe = list()
+    
     final_regular_oe[[k]] = cbind(
       theta = pooled_theta_regular_oe,
-      theta.se = pooled_se_regular_oe[1],
-      theta.cilb = pooled_theta_regular_oe - pooled_se_regular_oe[k]*pooled_se_regular_oe[1],
-      theta.ciub = pooled_theta_regular_oe + pooled_se_regular_oe[k]*pooled_se_regular_oe[1]
+      theta.se = pooled_se_regular_oe[4],
+      theta.cilb = pooled_theta_regular_oe - pooled_se_regular_oe[k]*pooled_se_regular_oe[4],
+      theta.ciub = pooled_theta_regular_oe + pooled_se_regular_oe[k]*pooled_se_regular_oe[4]
       )
     
     final_log_oe[[k]] = cbind(
       theta = exp(pooled_theta_log_oe), 
-      theta.se = pooled_se_log_oe[1],
-      theta.cilb = exp(pooled_theta_log_oe - pooled_se_log_oe[k]*pooled_se_log_oe[1]),
-      theta.ciub = exp(pooled_theta_log_oe + pooled_se_log_oe[k]*pooled_se_log_oe[1])
+      theta.se = pooled_se_log_oe[4],
+      theta.cilb = exp(pooled_theta_log_oe - pooled_se_log_oe[k]*pooled_se_log_oe[4]),
+      theta.ciub = exp(pooled_theta_log_oe + pooled_se_log_oe[k]*pooled_se_log_oe[4])
       )
   
     final_sqrt_oe[[k]] = cbind(
       theta =(pooled_theta_sqrt_oe)^2, 
-      theta.se = pooled_se_sqrt_oe[1],
-      theta.cilb = (pooled_theta_sqrt_oe - pooled_se_sqrt_oe[k]*pooled_se_sqrt_oe[1])^2,
-      theta.ciub = (pooled_theta_sqrt_oe + pooled_se_sqrt_oe[k]*pooled_se_sqrt_oe[1])^2
+      theta.se = pooled_se_sqrt_oe[4],
+      theta.cilb = (pooled_theta_sqrt_oe - pooled_se_sqrt_oe[k]*pooled_se_sqrt_oe[4])^2,
+      theta.ciub = (pooled_theta_sqrt_oe + pooled_se_sqrt_oe[k]*pooled_se_sqrt_oe[4])^2
       )
-  }
   
   ######################################
   ## Compare performance of O:E measures with reference O:E measure
   ######################################
-  
+    
   # Subsample true oe ratio
   true_oe_ratio <- as.list(reference_oe)[1:4]
   
-  # Results Table for 90% CI
-  oe_comparison_90 = rbind(true_oe_ratio, 
-                        final_regular_oe[[2]], 
-                        final_log_oe[[2]], 
-                        final_sqrt_oe[[2]]
+  # Results Table with [[1]] == 90%, [[2]] == 95%, [[3]] == 99%, 
+  oe_comparison[[k]] = rbind(true_oe_ratio, 
+                        final_regular_oe[[k]], 
+                        final_log_oe[[k]], 
+                        final_sqrt_oe[[k]]
                         )
-  oe_comparison_90 = as.data.frame(oe_comparison_90)
-  rownames(oe_comparison_90) <- c("true o:e", "regular o:e", "ln o:e", "sqrt o:e")
   
-  # Results Table for 95% CI
-  oe_comparison_95 = rbind(true_oe_ratio, 
-                        final_regular_oe[[3]], 
-                        final_log_oe[[3]], 
-                        final_sqrt_oe[[3]]
-  )
-  oe_comparison_95 = as.data.frame(oe_comparison_95)
-  rownames(oe_comparison_95) <- c("true o:e", "regular o:e", "ln o:e", "sqrt o:e")
+  oe_comparison[[k]] = as.data.frame(oe_comparison[[k]])
+  rownames(oe_comparison[[k]]) <- c("true o:e", "regular o:e", "ln o:e", "sqrt o:e")
   
-  # Results Table for 99% CI
-  oe_comparison_99 = rbind(true_oe_ratio, 
-                           final_regular_oe[[4]], 
-                           final_log_oe[[4]], 
-                           final_sqrt_oe[[4]]
-  )
-  oe_comparison_99 = as.data.frame(oe_comparison_99)
-  rownames(oe_comparison_99) <- c("true o:e", "regular o:e", "ln o:e", "sqrt o:e")
+  # Boolean Results: Check if reference O:E lies in the k CI% of the pooled O:E measure
+  res_regular[k] = isTRUE(final_regular_oe[[k]][3] < reference_oe$theta & reference_oe$theta < final_regular_oe[[k]][4])
+  res_log[k] = isTRUE(final_log_oe[[k]][3] < reference_oe$theta & reference_oe$theta < final_log_oe[[k]][4])
+  res_sqrt[k] = isTRUE(final_sqrt_oe[[k]][3] < reference_oe$theta & reference_oe$theta < final_sqrt_oe[[k]][4])
   
-  # Boolean vector Results for 90% CI: Check if reference O:E lies in the 95% CI of the pooled O:E measure
-  res_regular_90 = isTRUE(final_regular_oe[[2]][3] < reference_oe$theta & reference_oe$theta < final_regular_oe[[2]][4])
-  res_log_90 = isTRUE(final_log_oe[[2]][3] < reference_oe$theta & reference_oe$theta < final_log_oe[[2]][4])
-  res_sqrt_90 = isTRUE(final_sqrt_oe[[2]][3] < reference_oe$theta & reference_oe$theta < final_sqrt_oe[[2]][4])
-  
-  # Boolean vector Results for 95% CI: Check if reference O:E lies in the 95% CI of the pooled O:E measure
-  res_regular_95 = isTRUE(final_regular_oe[[3]][3] < reference_oe$theta & reference_oe$theta < final_regular_oe[[3]][4])
-  res_log_95 = isTRUE(final_log_oe[[3]][3] < reference_oe$theta & reference_oe$theta < final_log_oe[[3]][4])
-  res_sqrt_95 = isTRUE(final_sqrt_oe[[3]][3] < reference_oe$theta & reference_oe$theta < final_sqrt_oe[[3]][4])
-  
-  # Boolean vector Results for 99% CI: Check if reference O:E lies in the 95% CI of the pooled O:E measure
-  res_regular_99 = isTRUE(final_regular_oe[[4]][3] < reference_oe$theta & reference_oe$theta < final_regular_oe[[4]][4])
-  res_log_99 = isTRUE(final_log_oe[[4]][3] < reference_oe$theta & reference_oe$theta < final_log_oe[[4]][4])
-  res_sqrt_99 = isTRUE(final_sqrt_oe[[4]][3] < reference_oe$theta & reference_oe$theta < final_sqrt_oe[[4]][4])
+  }  
   
   ######################################
   ## Study repetition
   ######################################
   
   # Save results for study repetition
-  result_table_90[[j]] = oe_comparison_90
-  result_table_95[[j]] = oe_comparison_95
-  result_table_99[[j]] = oe_comparison_99
+  result_table[[j]] = oe_comparison
+  result_boolean_regular_90[[j]] = res_regular[[1]]
+  result_boolean_regular_95[[j]] = res_regular[[2]]
+  result_boolean_regular_99[[j]] = res_regular[[3]]
+  
+  result_boolean_log_90[[j]] = res_log[[1]]
+  result_boolean_log_95[[j]] = res_log[[2]]
+  result_boolean_log_99[[j]] = res_log[[3]]
+  
+  result_boolean_sqrt_90[[j]] = res_sqrt[[1]]
+  result_boolean_sqrt_95[[j]] = res_sqrt[[2]]
+  result_boolean_sqrt_99[[j]] = res_sqrt[[3]]
 
-  result_boolean_regular_90[[j]] = c(res_regular)
-  result_boolean_regular_95[[j]] = c(res_regular)
-  result_boolean_regular_99[[j]] = c(res_regular)
-  
-  result_boolean_log_90[[j]] = c(res_log)
-  result_boolean_log_95[[j]] = c(res_log)
-  result_boolean_log_99[[j]] = c(res_log)
-  
-  result_boolean_sqrt_90[[j]] = c(res_sqrt)
-  result_boolean_sqrt_95[[j]] = c(res_sqrt)
-  result_boolean_sqrt_99[[j]] = c(res_sqrt)
 }
 
 ######################################
@@ -474,19 +448,12 @@ for (j in 1:rep_amount){
 ######################################
 
 # Print tables of each round
-print(result_table_90)
-print(result_table_95)
-print(result_table_99)
-# print(result_per_sim)
-# print(result_boolean_regular)
-# print(result_boolean_log)
-# print(result_boolean_sqrt)
+print(result_table)
 
 # Interpretation: Percentage of how often true O:E falls into 95% CI of respective O:E measure 
 percentage_coverage_regular_90 = table(result_boolean_regular_90)["TRUE"]/rep_amount*100
 percentage_coverage_log_90 = table(result_boolean_log_90)["TRUE"]/rep_amount*100
 percentage_coverage_sqrt_90 = table(result_boolean_sqrt_90)["TRUE"]/rep_amount*100
-
 
 percentage_coverage_regular_95 = table(result_boolean_regular_95)["TRUE"]/rep_amount*100
 percentage_coverage_log_95 = table(result_boolean_log_95)["TRUE"]/rep_amount*100
