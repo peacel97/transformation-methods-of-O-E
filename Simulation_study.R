@@ -5,6 +5,7 @@
 # Change predictor variable to binary?
 # Include different CI-levels
 # Visualize results
+# Bias with true O:E or true O:E per round
 ######################################
 
 ######################################
@@ -54,25 +55,17 @@ package.check <- lapply(
 ######################################
 
 ## Set seed to get reproducible results
-set.seed(15)
+set.seed(18)
 
 ## Set amount of study repetition
-rep_amount = c(2)
+rep_amount = c(5)
 
 ## Initialize lists for results
 result_table = list()
-
-result_boolean_regular_90 = vector()
-result_boolean_regular_95 = vector()
-result_boolean_regular_99 = vector()
-
-result_boolean_log_90 = vector()
-result_boolean_log_95 = vector()
-result_boolean_log_99 = vector()
-
-result_boolean_sqrt_90 = vector()
-result_boolean_sqrt_95 = vector()
-result_boolean_sqrt_99 = vector()
+all_true_oe = list()
+all_bias_regular = list()
+all_bias_log = list()
+all_bias_sqrt = list()
 
 ## Loop for repetition of study
 for (j in 1:rep_amount){
@@ -90,8 +83,8 @@ for (j in 1:rep_amount){
   #hist(continuous_var_2)
   
   # Create linear combination of predictor variables and intercept
-  lin_combination_train = -4.5 + continuous_var_1 + continuous_var_2
-  lin_combination_test = -4 + continuous_var_1 + continuous_var_2
+  lin_combination_train = -4.667 + continuous_var_1 + continuous_var_2
+  lin_combination_test = -3.49 + continuous_var_1 + continuous_var_2
   
   # Probability for response variable to be 1
   # Note: Due to application for logistic regression, use inverse logit function
@@ -151,12 +144,10 @@ for (j in 1:rep_amount){
   # summary(fit_model_complete)
   
   ######################################
-  ## Calculate theoretical true O:E ratio
+  ## Calculate true O:E ratio
   ######################################
   
   # Define observed and expected events based on complete data
-  sum(train_data_complete$outcome_var == 1)
-  sum(test_data_complete$outcome_var == 1)
   n_observed_event = sum(test_data_complete$outcome_var == 1) #sum(test_data_complete$outcome_var == 1)
   n_expected_event = sum(train_data_complete$outcome_var == 1)#mean(fit_model_complete)*n_sample
   
@@ -166,7 +157,8 @@ for (j in 1:rep_amount){
     E = n_expected_event, # numeric vector of expected events
     N = nrow(train_data_complete)
   )
-  reference_oe
+  # Sub-sample of reference_oe to theta
+  reference_oe = as.vector(reference_oe[1])
   
   ######################################
   ## Ampute test data 
@@ -231,7 +223,7 @@ for (j in 1:rep_amount){
   # Choose imputation method
   # Interpretation: pmm default method for numeric data; logreg method for binary data
   # change to norm for smaller CI in results
-  imp_method = c("pmm", "pmm", "logreg") 
+  imp_method = c("norm", "norm", "logreg") 
   
   # Outcome variable as categorical variable for imp_method logreg
   df_amputed$outcome_var <- as.factor(df_amputed$outcome_var)
@@ -241,8 +233,7 @@ for (j in 1:rep_amount){
                 m = imp_amount, 
                 maxit = imp_iteration,
                 method = imp_method, 
-                print = TRUE,
-                seed = 18
+                print = TRUE
                 )
   
   # Inspect convergence
@@ -369,15 +360,11 @@ for (j in 1:rep_amount){
   # Loop over confidence intervals
   # Initialize [1] == 90%CI, [2] == 95%CI, [3] == 99%CI
   oe_comparison = list() 
-  res_regular = list()
-  res_log = list()
-  res_sqrt = list()
+  final_regular_oe = list()
+  final_log_oe = list()
+  final_sqrt_oe = list()
   
   for (k in 1:3){
-    final_regular_oe = list()
-    final_log_oe = list()
-    final_sqrt_oe = list()
-    
     final_regular_oe[[k]] = cbind(
       theta = pooled_theta_regular_oe,
       theta.se = pooled_se_regular_oe[4],
@@ -402,24 +389,16 @@ for (j in 1:rep_amount){
   ######################################
   ## Compare performance of O:E measures with reference O:E measure
   ######################################
-    
-  # Subsample true oe ratio
-  true_oe_ratio <- as.list(reference_oe)[1:4]
   
   # Results Table with [[1]] == 90%, [[2]] == 95%, [[3]] == 99%, 
-  oe_comparison[[k]] = rbind(true_oe_ratio, 
+  oe_comparison[[k]] = rbind(#true_oe_ratio, 
                         final_regular_oe[[k]], 
                         final_log_oe[[k]], 
                         final_sqrt_oe[[k]]
                         )
   
   oe_comparison[[k]] = as.data.frame(oe_comparison[[k]])
-  rownames(oe_comparison[[k]]) <- c("true o:e", "regular o:e", "ln o:e", "sqrt o:e")
-  
-  # Boolean Results: Check if reference O:E lies in the k CI% of the pooled O:E measure
-  res_regular[k] = isTRUE(final_regular_oe[[k]][3] < reference_oe$theta & reference_oe$theta < final_regular_oe[[k]][4])
-  res_log[k] = isTRUE(final_log_oe[[k]][3] < reference_oe$theta & reference_oe$theta < final_log_oe[[k]][4])
-  res_sqrt[k] = isTRUE(final_sqrt_oe[[k]][3] < reference_oe$theta & reference_oe$theta < final_sqrt_oe[[k]][4])
+  rownames(oe_comparison[[k]]) <- c("regular o:e", "ln o:e", "sqrt o:e")
   
   }  
   
@@ -429,54 +408,122 @@ for (j in 1:rep_amount){
   
   # Save results for study repetition
   result_table[[j]] = oe_comparison
-  result_boolean_regular_90[[j]] = res_regular[[1]]
-  result_boolean_regular_95[[j]] = res_regular[[2]]
-  result_boolean_regular_99[[j]] = res_regular[[3]]
+  all_true_oe[[j]] = reference_oe
   
-  result_boolean_log_90[[j]] = res_log[[1]]
-  result_boolean_log_95[[j]] = res_log[[2]]
-  result_boolean_log_99[[j]] = res_log[[3]]
+  # Bias per round
+  all_bias_regular[[j]] = pooled_theta_regular_oe - reference_oe
+  all_bias_log[[j]] = (exp(pooled_theta_log_oe)) - reference_oe
+  all_bias_sqrt[[j]] = ((pooled_theta_sqrt_oe)^2) - reference_oe
   
-  result_boolean_sqrt_90[[j]] = res_sqrt[[1]]
-  result_boolean_sqrt_95[[j]] = res_sqrt[[2]]
-  result_boolean_sqrt_99[[j]] = res_sqrt[[3]]
-
 }
 
 ######################################
-## Across study repetitions: Percentage of how often true O:E falls into 95% CI of respective O:E measure 
+## Calculations after the Simulation study
 ######################################
 
-# Print tables of each round
+# Print tables of transformed O:E ratios of each iteration
 print(result_table)
 
-# Interpretation: Percentage of how often true O:E falls into 95% CI of respective O:E measure 
-percentage_coverage_regular_90 = table(result_boolean_regular_90)["TRUE"]/rep_amount*100
-percentage_coverage_log_90 = table(result_boolean_log_90)["TRUE"]/rep_amount*100
-percentage_coverage_sqrt_90 = table(result_boolean_sqrt_90)["TRUE"]/rep_amount*100
+# Calculate true O:E ratio as mean of 1:rep_amount reference O:E ratio
+mean_true_oe = (sum(unlist(all_true_oe)))/rep_amount
 
-percentage_coverage_regular_95 = table(result_boolean_regular_95)["TRUE"]/rep_amount*100
-percentage_coverage_log_95 = table(result_boolean_log_95)["TRUE"]/rep_amount*100
-percentage_coverage_sqrt_95 = table(result_boolean_sqrt_95)["TRUE"]/rep_amount*100
+# Calculate percentage of how often true O:E falls into CI of respective O:E measure at level 0.9, 0.95, 0.99
+res_regular_90 = vector()
+res_log_90 = vector()
+res_sqrt_90 = vector()
 
-percentage_coverage_regular_99 = table(result_boolean_regular_99)["TRUE"]/rep_amount*100
-percentage_coverage_log_99 = table(result_boolean_log_99)["TRUE"]/rep_amount*100
-percentage_coverage_sqrt_99 = table(result_boolean_sqrt_99)["TRUE"]/rep_amount*100
+res_regular_95 = vector()
+res_log_95 = vector()
+res_sqrt_95 = vector()
 
-# Print percentage of coverage
-percentage_coverage_regular_90
-percentage_coverage_log_90
-percentage_coverage_sqrt_90
+res_regular_99 = vector()
+res_log_99 = vector()
+res_sqrt_99 = vector()
 
-percentage_coverage_regular_95
-percentage_coverage_log_95
-percentage_coverage_sqrt_95
+res_regular_all = list()
+res_log_all = list()
+res_sqrt_all = list()
 
-percentage_coverage_regular_99
-percentage_coverage_log_99
-percentage_coverage_sqrt_99
+# Note: result_table[[rep_amount (j)]][[CI level (k)]][row, column] 
+for (j in 1:rep_amount){
+    # Boolean Results: Check if reference O:E lies in the k CI% of the pooled O:E measure
+    res_regular_90[j] = isTRUE(result_table[[j]][[1]][1,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][1,4])
+    res_log_90[j] = isTRUE(result_table[[j]][[1]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][2,4])
+    res_sqrt_90[j] = isTRUE(result_table[[j]][[1]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][3,4])
+
+    res_regular_95[j] = isTRUE(result_table[[j]][[2]][1,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][1,4])
+    res_log_95[j] = isTRUE(result_table[[j]][[2]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][2,4])
+    res_sqrt_95[j] = isTRUE(result_table[[j]][[2]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][3,4])
+
+    res_regular_99[j] = isTRUE(result_table[[j]][[3]][1,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][1,4])
+    res_log_99[j] = isTRUE(result_table[[j]][[3]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][2,4])
+    res_sqrt_99[j] = isTRUE(result_table[[j]][[3]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][3,4])
+}
+
+# Interpretation: Percentage of how often true O:E falls into CI of respective O:E measure 
+percentage_coverage_regular_90 = table(res_regular_90)["TRUE"]/rep_amount*100
+percentage_coverage_log_90 = table(res_log_90)["TRUE"]/rep_amount*100
+percentage_coverage_sqrt_90 = table(res_sqrt_90)["TRUE"]/rep_amount*100
+
+percentage_coverage_regular_95 = table(res_regular_95)["TRUE"]/rep_amount*100
+percentage_coverage_log_95 = table(res_log_95)["TRUE"]/rep_amount*100
+percentage_coverage_sqrt_95 = table(res_sqrt_95)["TRUE"]/rep_amount*100
+
+percentage_coverage_regular_99 = table(res_regular_99)["TRUE"]/rep_amount*100
+percentage_coverage_log_99 = table(res_log_99)["TRUE"]/rep_amount*100
+percentage_coverage_sqrt_99 = table(res_sqrt_99)["TRUE"]/rep_amount*100
+
+######################################
+## Results: Table of coverage rate in %
+######################################
+
+coverage_regular = cbind(percentage_coverage_regular_90,
+                         percentage_coverage_regular_95,
+                         percentage_coverage_regular_99)
+
+coverage_log = cbind(percentage_coverage_log_90,
+                     percentage_coverage_log_95,
+                     percentage_coverage_log_99)
+
+coverage_sqrt = cbind(percentage_coverage_sqrt_90,
+                      percentage_coverage_sqrt_95,
+                      percentage_coverage_sqrt_99)
+
+coverage_table = rbind(coverage_regular,
+                       coverage_log,
+                       coverage_sqrt)
+
+coverage_table = as.data.frame(coverage_table)
+rownames(coverage_table) <- c("Regular O:E Ratio", "Ln O:E Ratio", "Sqrt O:E Ratio")
+names(coverage_table)[1] = "CI 0.90"
+names(coverage_table)[2] = "CI 0.95"
+names(coverage_table)[3] = "CI 0.99"
+
+print(coverage_table)
 
 ################################
+# Results: Table of Bias
+################################
 
-# Results Visualization:
-# tbd
+bias_table = cbind(
+  bias_regular = sum(unlist(all_bias_regular))/rep_amount,
+  bias_log = sum(unlist(all_bias_log))/rep_amount,
+  bias_sqrt = sum(unlist(all_bias_sqrt))/rep_amount
+)
+# bias_table = as.data.frame(bias_table)
+# names(bias_table)[1] = "Bias of regular O:E Ratio"
+# names(bias_table)[2] = "Bias of ln O:E Ratio"
+# names(bias_table)[3] = "Bias of sqrt O:E Ratio"
+print(bias_table)
+
+################################
+# Results: Scatterplot
+################################
+
+
+
+################################
+# Results: Histograms
+################################
+
+
