@@ -1,12 +1,10 @@
 ####### V1 Simulation study
 
-######################################
-# TO DO
-# Change predictor variable to binary?
-# Include different CI-levels
-# Visualize results
-# Bias with true O:E or true O:E per round
-######################################
+# Not skewed enough?
+# How calculate Monte Carlo SE of bias for each iteration
+# What are possible explanations for our results
+# Are plots sufficient
+# Density Histograms > 1
 
 ######################################
 ### Steps
@@ -36,7 +34,8 @@ packages = c("mice",
              "tidyverse",
              "caret",
              "MASS",
-             "logit"
+             "ggplot2",
+             "gridExtra"
              )
 
 ## Install&load packages or load packages, if already installed
@@ -58,14 +57,19 @@ package.check <- lapply(
 set.seed(18)
 
 ## Set amount of study repetition
-rep_amount = c(5)
+rep_amount = c(1000)
 
 ## Initialize lists for results
 result_table = list()
 all_true_oe = list()
-all_bias_regular = list()
-all_bias_log = list()
-all_bias_sqrt = list()
+
+all_regular_theta = list()
+all_log_theta = list()
+all_sqrt_theta = list()
+
+distribution_prior_reg = list()
+distribution_prior_log = list()
+distribution_prior_sqrt = list()
 
 ## Loop for repetition of study
 for (j in 1:rep_amount){
@@ -75,16 +79,16 @@ for (j in 1:rep_amount){
 
   # Continuous predictor variables
   continuous_var_1 = rnorm(n = n_sample, mean = 2, sd = 0.5)
-  summary(continuous_var_1)
+  #summary(continuous_var_1)
   #hist(continuous_var_1)
   
   continuous_var_2 = rnorm(n = n_sample, mean = 1.5, sd = 0.25)
-  summary(continuous_var_2)
+  #summary(continuous_var_2)
   #hist(continuous_var_2)
   
   # Create linear combination of predictor variables and intercept
-  lin_combination_train = -4.667 + continuous_var_1 + continuous_var_2
-  lin_combination_test = -3.49 + continuous_var_1 + continuous_var_2
+  lin_combination_train = -4.37 + continuous_var_1 + continuous_var_2
+  lin_combination_test = -4.37 + continuous_var_1 + continuous_var_2
   
   # Probability for response variable to be 1
   # Note: Due to application for logistic regression, use inverse logit function
@@ -104,6 +108,13 @@ for (j in 1:rep_amount){
   #summary(outcome_var)
   #hist(outcome_var)
   
+  # Additional noise
+  # noise_param.1 = sample(seq_len(floor(length(outcome_var_train[outcome_var_train==1])*0.25)))
+  # noise_param.0 = sample(seq_len(floor(length(outcome_var_train[outcome_var_train==0])*0.25)))
+  # 
+  # noise_param.1 = sample(seq_len(floor(length(outcome_var_test[outcome_var_test==1])*0.00)))
+  # noise_param.0 = sample(seq_len(floor(length(outcome_var_test[outcome_var_test==0])*0.00)))
+  
   # Combine it to a data frame
   train_data_complete = data.frame(
               continuous_var_1,
@@ -116,6 +127,12 @@ for (j in 1:rep_amount){
     continuous_var_2,
     outcome_var = outcome_var_test
   )
+  
+  # train_data_complete$outcome_var[noise_param.0] = 1
+  # train_data_complete$outcome_var[noise_param.1] = 0
+  # 
+  # test_data_complete$outcome_var[noise_param.0] = 1
+  # test_data_complete$outcome_var[noise_param.1] = 0
 
   ######################################
   ## Split data and develop prediction model
@@ -157,8 +174,7 @@ for (j in 1:rep_amount){
     E = n_expected_event, # numeric vector of expected events
     N = nrow(train_data_complete)
   )
-  # Sub-sample of reference_oe to theta
-  reference_oe = as.vector(reference_oe[1])
+  reference_oe
   
   ######################################
   ## Ampute test data 
@@ -223,7 +239,7 @@ for (j in 1:rep_amount){
   # Choose imputation method
   # Interpretation: pmm default method for numeric data; logreg method for binary data
   # change to norm for smaller CI in results
-  imp_method = c("norm", "norm", "logreg") 
+  imp_method = c("pmm", "pmm", "logreg") 
   
   # Outcome variable as categorical variable for imp_method logreg
   df_amputed$outcome_var <- as.factor(df_amputed$outcome_var)
@@ -252,6 +268,10 @@ for (j in 1:rep_amount){
   log_oe_list = list()
   sqrt_oe_list = list()
   
+  regular_oe_theta = vector()
+  log_oe_theta = vector()
+  sqrt_oe_theta = vector()
+  
   # Loop for all imputed data sets
   for (i in 1:imp_amount){
     # Subset imputed data sets
@@ -272,6 +292,8 @@ for (j in 1:rep_amount){
       N = nrow(subset_imputed)
     )
     
+    regular_oe_theta[[i]] = regular_oe_list[[i]][1]
+    
     # Calculate log O:E and save it to list
     log_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
@@ -279,6 +301,9 @@ for (j in 1:rep_amount){
       N = nrow(subset_imputed),
       g = "log(OE)"
     )
+    
+    log_oe_theta[[i]] = log_oe_list[[i]][1]
+    
     # Calculate square root O:E and save it to list
     sqrt_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
@@ -286,6 +311,8 @@ for (j in 1:rep_amount){
       N = nrow(subset_imputed),
       g = "sqrt(OE)"
     )
+    
+    sqrt_oe_theta[[i]] = sqrt_oe_list[[i]][1]
   }
   
   ######################################
@@ -390,31 +417,39 @@ for (j in 1:rep_amount){
   ## Compare performance of O:E measures with reference O:E measure
   ######################################
   
+  # Sub-sample of reference_oe to theta
+  final_true_oe = as.list(reference_oe)[1:4]
+      
   # Results Table with [[1]] == 90%, [[2]] == 95%, [[3]] == 99%, 
-  oe_comparison[[k]] = rbind(#true_oe_ratio, 
+  oe_comparison[[k]] = rbind( 
+                        final_true_oe,
                         final_regular_oe[[k]], 
                         final_log_oe[[k]], 
                         final_sqrt_oe[[k]]
                         )
   
   oe_comparison[[k]] = as.data.frame(oe_comparison[[k]])
-  rownames(oe_comparison[[k]]) <- c("regular o:e", "ln o:e", "sqrt o:e")
+  rownames(oe_comparison[[k]]) <- c("true o:e", "regular o:e", "ln o:e", "sqrt o:e")
   
   }  
-  
+
   ######################################
   ## Study repetition
   ######################################
-  
-  # Save results for study repetition
+
+  # Save general results
   result_table[[j]] = oe_comparison
-  all_true_oe[[j]] = reference_oe
+  all_true_oe[[j]] = final_true_oe$theta
+
+  # Save theta to calculate bias
+  all_regular_theta[[j]] = pooled_theta_regular_oe
+  all_log_theta[[j]] = (exp(pooled_theta_log_oe))
+  all_sqrt_theta[[j]] = ((pooled_theta_sqrt_oe)^2)
   
-  # Bias per round
-  all_bias_regular[[j]] = pooled_theta_regular_oe - reference_oe
-  all_bias_log[[j]] = (exp(pooled_theta_log_oe)) - reference_oe
-  all_bias_sqrt[[j]] = ((pooled_theta_sqrt_oe)^2) - reference_oe
-  
+  # Save transformed O:E ratios based on imputed data set prior to pooling to check for improvement of normality shape
+  distribution_prior_reg[[j]] = regular_oe_theta
+  distribution_prior_log[[j]] = log_oe_theta
+  distribution_prior_sqrt[[j]] = sqrt_oe_theta
 }
 
 ######################################
@@ -427,7 +462,7 @@ print(result_table)
 # Calculate true O:E ratio as mean of 1:rep_amount reference O:E ratio
 mean_true_oe = (sum(unlist(all_true_oe)))/rep_amount
 
-# Calculate percentage of how often true O:E falls into CI of respective O:E measure at level 0.9, 0.95, 0.99
+# Initialize vectors for loop
 res_regular_90 = vector()
 res_log_90 = vector()
 res_sqrt_90 = vector()
@@ -444,34 +479,35 @@ res_regular_all = list()
 res_log_all = list()
 res_sqrt_all = list()
 
+# Assign true value to vector, if respective estimate falls into respective CI
 # Note: result_table[[rep_amount (j)]][[CI level (k)]][row, column] 
 for (j in 1:rep_amount){
-    # Boolean Results: Check if reference O:E lies in the k CI% of the pooled O:E measure
-    res_regular_90[j] = isTRUE(result_table[[j]][[1]][1,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][1,4])
-    res_log_90[j] = isTRUE(result_table[[j]][[1]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][2,4])
-    res_sqrt_90[j] = isTRUE(result_table[[j]][[1]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][3,4])
-
-    res_regular_95[j] = isTRUE(result_table[[j]][[2]][1,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][1,4])
-    res_log_95[j] = isTRUE(result_table[[j]][[2]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][2,4])
-    res_sqrt_95[j] = isTRUE(result_table[[j]][[2]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][3,4])
-
-    res_regular_99[j] = isTRUE(result_table[[j]][[3]][1,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][1,4])
-    res_log_99[j] = isTRUE(result_table[[j]][[3]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][2,4])
-    res_sqrt_99[j] = isTRUE(result_table[[j]][[3]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][3,4])
+    # with respect to 90-CI
+    res_regular_90[j] = isTRUE(result_table[[j]][[1]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][2,4])
+    res_log_90[j] = isTRUE(result_table[[j]][[1]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][3,4])
+    res_sqrt_90[j] = isTRUE(result_table[[j]][[1]][4,3] < mean_true_oe & mean_true_oe < result_table[[j]][[1]][4,4])
+    # with respect to 95-CI
+    res_regular_95[j] = isTRUE(result_table[[j]][[2]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][2,4])
+    res_log_95[j] = isTRUE(result_table[[j]][[2]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][3,4])
+    res_sqrt_95[j] = isTRUE(result_table[[j]][[2]][4,3] < mean_true_oe & mean_true_oe < result_table[[j]][[2]][4,4])
+    # with respect to 99-CI
+    res_regular_99[j] = isTRUE(result_table[[j]][[3]][2,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][2,4])
+    res_log_99[j] = isTRUE(result_table[[j]][[3]][3,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][3,4])
+    res_sqrt_99[j] = isTRUE(result_table[[j]][[3]][4,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][4,4])
 }
 
-# Interpretation: Percentage of how often true O:E falls into CI of respective O:E measure 
-percentage_coverage_regular_90 = table(res_regular_90)["TRUE"]/rep_amount*100
-percentage_coverage_log_90 = table(res_log_90)["TRUE"]/rep_amount*100
-percentage_coverage_sqrt_90 = table(res_sqrt_90)["TRUE"]/rep_amount*100
+# Calculate percentage of how often true O:E falls into CI of respective O:E measure at level 0.9, 0.95, 0.99
+percentage_coverage_regular_90 = table(res_regular_90)["TRUE"]/rep_amount
+percentage_coverage_log_90 = table(res_log_90)["TRUE"]/rep_amount
+percentage_coverage_sqrt_90 = table(res_sqrt_90)["TRUE"]/rep_amount
 
-percentage_coverage_regular_95 = table(res_regular_95)["TRUE"]/rep_amount*100
-percentage_coverage_log_95 = table(res_log_95)["TRUE"]/rep_amount*100
-percentage_coverage_sqrt_95 = table(res_sqrt_95)["TRUE"]/rep_amount*100
+percentage_coverage_regular_95 = table(res_regular_95)["TRUE"]/rep_amount
+percentage_coverage_log_95 = table(res_log_95)["TRUE"]/rep_amount
+percentage_coverage_sqrt_95 = table(res_sqrt_95)["TRUE"]/rep_amount
 
-percentage_coverage_regular_99 = table(res_regular_99)["TRUE"]/rep_amount*100
-percentage_coverage_log_99 = table(res_log_99)["TRUE"]/rep_amount*100
-percentage_coverage_sqrt_99 = table(res_sqrt_99)["TRUE"]/rep_amount*100
+percentage_coverage_regular_99 = table(res_regular_99)["TRUE"]/rep_amount
+percentage_coverage_log_99 = table(res_log_99)["TRUE"]/rep_amount
+percentage_coverage_sqrt_99 = table(res_sqrt_99)["TRUE"]/rep_amount
 
 ######################################
 ## Results: Table of coverage rate in %
@@ -501,29 +537,351 @@ names(coverage_table)[3] = "CI 0.99"
 
 print(coverage_table)
 
+######################################
+## Results: Monte Carlo error of coverage rate
+######################################
+se_reg_90 = (sqrt((coverage_table[1,1]*(1-coverage_table[1,1])/rep_amount)))
+se_reg_95 = (sqrt((coverage_table[1,2]*(1-coverage_table[1,2])/rep_amount)))
+se_reg_99 = (sqrt((coverage_table[1,3]*(1-coverage_table[1,3])/rep_amount)))
+  
+se_log_90 = (sqrt((coverage_table[2,1]*(1-coverage_table[2,1])/rep_amount)))
+se_log_95 = (sqrt((coverage_table[2,2]*(1-coverage_table[2,2])/rep_amount)))
+se_log_99 = (sqrt((coverage_table[2,3]*(1-coverage_table[2,3])/rep_amount)))
+  
+se_sqrt_90 = (sqrt((coverage_table[3,1]*(1-coverage_table[3,1])/rep_amount)))
+se_sqrt_95 = (sqrt((coverage_table[3,2]*(1-coverage_table[3,2])/rep_amount)))
+se_sqrt_99 = (sqrt((coverage_table[3,3]*(1-coverage_table[3,3])/rep_amount)))
+
 ################################
 # Results: Table of Bias
 ################################
+diff_reg_true = vector()
+diff_log_true = vector()
+diff_sqrt_true = vector()
 
-bias_table = cbind(
-  bias_regular = sum(unlist(all_bias_regular))/rep_amount,
-  bias_log = sum(unlist(all_bias_log))/rep_amount,
-  bias_sqrt = sum(unlist(all_bias_sqrt))/rep_amount
-)
-# bias_table = as.data.frame(bias_table)
-# names(bias_table)[1] = "Bias of regular O:E Ratio"
-# names(bias_table)[2] = "Bias of ln O:E Ratio"
-# names(bias_table)[3] = "Bias of sqrt O:E Ratio"
-print(bias_table)
+for (j in 1:rep_amount){
+diff_reg_true[[j]] = all_regular_theta[[j]] - mean_true_oe
+diff_log_true[[j]] = all_log_theta[[j]] - mean_true_oe
+diff_sqrt_true[[j]] = all_sqrt_theta[[j]] - mean_true_oe
+}
+
+bias_regular = sum(diff_reg_true)/rep_amount
+bias_log = sum(diff_log_true)/rep_amount
+bias_sqrt = sum(diff_sqrt_true)/rep_amount
+
+######################################
+## Results: Monte Carlo error of bias
+######################################
+diff_reg_estimate = vector()
+diff_log_estimate = vector()
+diff_sqrt_estimate = vector()
+
+for (j in 1:rep_amount){
+  diff_reg_estimate[[j]] = (all_regular_theta[[j]] - mean(unlist(all_regular_theta)))^2
+  diff_log_estimate[[j]] = (all_log_theta[[j]] - mean(unlist(all_regular_theta)))^2
+  diff_sqrt_estimate[[j]] = (all_sqrt_theta[[j]] - mean(unlist(all_regular_theta)))^2
+}
+
+se_bias_reg = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_reg_estimate))
+se_bias_log = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_log_estimate))
+se_bias_sqrt = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_sqrt_estimate))
+
+# ################################
+# # Visualizations: Distribution True O:E
+# ################################
+# 
+# df_true_oe = as.data.frame(unlist(all_true_oe))
+# names(df_true_oe)[1] = "true_oe"
+# 
+# plot_true_oe <- ggplot(df_true_oe, aes(x = true_oe)) + 
+#   geom_histogram(aes(y = ..density..), bins=40, color="black", fill="white") +
+#   geom_vline(aes(xintercept=mean(true_oe)),
+#              color="darkred", linetype="solid", size=1.25)+
+#   theme_classic()+
+#   labs(x = "True O:E",
+#        y = "Density")+
+#   theme(
+#     axis.title.x = element_text(color="black", size=12),
+#   )+
+#   geom_density()
+# 
+# ################################
+# # Visualizations: Histograms prior to pooling based on multiple imputed data sets
+# ################################
+# 
+# ## Histogram of regular O:E prior to pooling based on multiple imputed data sets
+# df_prior_reg = as.data.frame(unlist(distribution_prior_reg))
+# names(df_prior_reg)[1] = "prior_reg"
+# 
+# prior_plot_reg <- ggplot(df_prior_reg, aes(x = prior_reg)) + 
+#   geom_histogram(aes(y = ..density..), bins=40, color="black", fill="white") +
+#   geom_vline(aes(xintercept=mean(prior_reg)),
+#              color="darkred", linetype="solid", size=1.25)+
+#   theme_classic()+
+#   labs(x = "Regular O:E",
+#        y = "Density")+
+#   theme(
+#     axis.title.x = element_text(color="black", size=12),
+#   )+
+#   geom_density()
+#
+## Histogram of ln O:E prior to pooling based on multiple imputed data sets
+# df_prior_log = as.data.frame(unlist(distribution_prior_log))
+# names(df_prior_log)[1] = "prior_log"
+# 
+# prior_plot_log <- ggplot(df_prior_log, aes(x = prior_log)) + 
+#   geom_histogram(aes(y = ..density..), bins=40, color="black", fill="white") +
+#   geom_vline(aes(xintercept=mean(prior_log)),
+#              color="darkred", linetype="solid", size=1.25)+
+#   theme_classic()+
+#   labs(x = "Ln O:E",
+#        y = "Density")+
+#   theme(
+#     axis.title.x = element_text(color="black", size=12),
+#   )+
+#   geom_density()
+# 
+# ## Histogram of square root O:E prior to pooling based on multiple imputed data sets
+# df_prior_sqrt = as.data.frame(unlist(distribution_prior_sqrt))
+# names(df_prior_sqrt)[1] = "prior_sqrt"
+# 
+# prior_plot_sqrt <- ggplot(df_prior_sqrt, aes(x = prior_sqrt)) + 
+#   geom_histogram(aes(y = ..density..), bins=40, color="black", fill="white") +
+#   geom_vline(aes(xintercept=mean(prior_sqrt)),
+#              color="darkred", linetype="solid", size=1.25)+
+#   theme_classic()+
+#   labs(x = "Square root O:E",
+#        y = "Density")+
+#   theme(
+#     axis.title.x = element_text(color="black", size=12),
+#   )+
+#   geom_density()
+# 
+# # Combine plots to one overall plot
+# grid.arrange(prior_plot_reg, prior_plot_log, prior_plot_sqrt,
+#              top = "",
+#              nrow = 3,
+#              ncol = 1)
 
 ################################
-# Results: Scatterplot
+# Visualizations: Histograms posterior to pooling
+################################
+df_hist <- data.frame(theta_reg = unlist(all_regular_theta),
+                      theta_ln = unlist(all_log_theta),
+                      theta_sqrt = unlist(all_sqrt_theta))
+
+plot_1 <- ggplot(df_hist, aes(x = theta_reg)) + 
+  geom_histogram(aes(y = ..density..), bins=70, color="black", fill="white") +
+  geom_vline(aes(xintercept=mean(theta_reg)),
+             color="darkred", linetype="solid", size=1)+
+  theme_classic()+
+  ylim(0, 7)+
+  labs(x = "Regular O:E",
+       y = "O:E = 1")+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )+
+  geom_density()
+
+plot_2 <- ggplot(df_hist, aes(x = theta_ln)) + 
+  geom_histogram(aes(y = ..density..), bins=70, color="black", fill="white") +
+  geom_vline(aes(xintercept=mean(theta_ln)),
+             color="darkred", linetype="solid", size=1)+
+  theme_classic()+
+  ylim(0, 7)+
+  labs(x = "Ln O:E",
+       y = "")+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )+
+  geom_density()
+
+plot_3 <- ggplot(df_hist, aes(x = theta_sqrt)) + 
+  geom_histogram(aes(y = ..density..), bins=70, color="black", fill="white") +
+  geom_vline(aes(xintercept=mean(theta_sqrt)),
+             color="darkred", linetype="solid", size=1)+
+  theme_classic()+
+  ylim(0, 7)+
+  labs(x = "Square root O:E",
+       y = "")+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )+
+  geom_density()
+
+set_plot_dimensions(16, 4)
+grid.arrange(plot_1, plot_2, plot_3,
+             top = "",
+             ncol = 3,
+             nrow = 1)
+
+################################
+# Visualizations: Scatterplot on bias
+################################
+df_bias = data.frame(bias_regular_n = diff_reg_true, 
+                     bias_log_n = diff_log_true, 
+                     bias_sqrt_n = diff_sqrt_true)
+
+df_bias$index = 1:nrow(df_bias)
+
+
+sc_1 <- ggplot(df_bias, aes(x=bias_regular_n, y=index)) + 
+  geom_point(size=0.5, shape=1)+
+  labs(x = "Bias: Regular O:E",
+       y = "O:E = 1")+
+  theme_classic()+
+  geom_vline(aes(xintercept=mean(bias_regular_n)),
+             color="darkred", linetype="solid", size=1.25)+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )
+
+sc_2 <- ggplot(df_bias, aes(x=bias_log_n, y=index)) + 
+  geom_point(size=0.5, shape=1)+
+  labs(x = "Bias: Ln O:E",
+       y = "O:E = 1")+
+  theme_classic()+
+  geom_vline(aes(xintercept=mean(bias_log_n)),
+             color="darkred", linetype="solid", size=1.25)+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )
+
+sc_3 <- ggplot(df_bias, aes(x=bias_sqrt_n, y=index)) + 
+  geom_point(size=0.5, shape=1)+
+  labs(x = "Bias: Square root O:E",
+       y = "O:E = 1")+
+  theme_classic()+
+  geom_vline(aes(xintercept=mean(bias_sqrt_n)),
+             color="darkred", linetype="solid", size=1.25)+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )
+
+################################
+# Visualizations: Scatterplot on monte carlo se of bias
 ################################
 
+df_se_bias = data.frame(se_bias_regular_n = diff_reg_estimate, 
+                     se_bias_log_n = diff_log_estimate, 
+                     se_bias_sqrt_n = diff_sqrt_true)
 
+df_se_bias$index = 1:nrow(df_se_bias)
+
+sc_se_1 <- ggplot(df_se_bias, aes(x=se_bias_regular_n, y=index)) + 
+  geom_point(size=0.5, shape=1)+
+  labs(x = "SE: Regular O:E",
+       y = "")+
+  theme_classic()+
+  geom_vline(aes(xintercept=se_bias_reg),
+             color="darkred", linetype="solid", size=1.25)+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )
+
+sc_se_2 <- ggplot(df_se_bias, aes(x=se_bias_log_n, y=index)) + 
+  geom_point(size=0.5, shape=1)+
+  labs(x = "SE: Ln O:E",
+       y = "")+
+  theme_classic()+
+  geom_vline(aes(xintercept=se_bias_log),
+             color="darkred", linetype="solid", size=1.25)+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )
+
+sc_se_3 <- ggplot(df_se_bias, aes(x=se_bias_sqrt_n, y=index)) + 
+  geom_point(size=0.5, shape=1)+
+  labs(x = "SE: Square root O:E",
+       y = "")+
+  theme_classic()+
+  geom_vline(aes(xintercept=se_bias_sqrt),
+             color="darkred", linetype="solid", size=1.25)+
+  theme(
+    axis.title.x = element_text(color="black", size=12),
+  )
+
+grid.arrange(sc_1, sc_se_1,
+             sc_2, sc_se_2,
+             sc_3, sc_se_3,
+             top = "",
+             ncol = 2,
+             nrow = 3)
 
 ################################
-# Results: Histograms
+# Visualizations: Lollipop plot of coverage rate and its monte carlo standard error
 ################################
+# Note: Darkgreen == Regular, Darkorange == Log, Darkblue == Square root
 
+# df Coverage at alpha = 0.1
+df_cov_90 = data.frame(
+  transformation = c("3", "2", "1"),
+  cov_90 = c(unlist(coverage_table[,1])),
+  se_90 = c(se_reg_90, se_log_90, se_sqrt_90))
+                
+# plot Coverage at alpha = 0.1
+lolli_1 <- ggplot(df_cov_90) +
+  geom_point(aes(x=cov_90, y=transformation, colour=transformation), size = 1) +
+  geom_vline(xintercept = 0.9, color = "black")+
+  xlim(0.7, 1)+
+  scale_color_manual(name = "",
+                     #breaks = transformation,
+                     values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
+  geom_segment( aes(x=cov_90, xend=0.9, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
+  geom_point( aes(x=cov_90-1.96*se_90, y=transformation, colour=transformation), shape=91, size = 5) +
+  geom_point( aes(x=cov_90+1.96*se_90, y=transformation, colour=transformation), shape=93, size = 5) +
+  theme_set(theme_bw())+
+  labs(x = "α = 0.1", y = "O:E Ratio = 1")+
+  theme(legend.position="none", axis.text.y = element_blank())
+  
 
+# df Coverage at alpha = 0.05
+df_cov_95 = data.frame(
+  transformation = c("3", "2", "1"),
+  cov_95 = c(unlist(coverage_table[,2])),
+  se_95 = c(se_reg_95, se_log_95, se_sqrt_95))
+
+# plot Coverage at alpha = 0.05
+lolli_2 <- ggplot(df_cov_95) +
+  geom_point(aes(x=cov_95, y=transformation, colour=transformation), size = 1) +
+  geom_vline(xintercept = 0.95, color = "black")+
+  xlim(0.7, 1)+
+  scale_color_manual(name = "",
+                     #breaks = transformation,
+                     values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
+  geom_segment( aes(x=cov_95, xend=0.95, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
+  geom_point( aes(x=cov_95-1.96*se_95, y=transformation, colour=transformation), shape=91, size = 5) +
+  geom_point( aes(x=cov_95+1.96*se_95, y=transformation, colour=transformation), shape=93, size = 5) +
+  theme_set(theme_bw())+
+  theme(legend.position="none", axis.text.y = element_blank())+
+  labs(x = "α = 0.05", y = "")
+
+# df Coverage at alpha = 0.01
+df_cov_99 = data.frame(
+  transformation = c("3", "2", "1"),
+  cov_99 = c(unlist(coverage_table[,3])),
+  se_99 = c(se_reg_99, se_log_99, se_sqrt_99))
+
+# plot Coverage at alpha = 0.05
+lolli_3 <- ggplot(df_cov_99) +
+  geom_point(aes(x=cov_99, y=transformation, colour=transformation), size = 1) +
+  geom_vline(xintercept = 0.99, color = "black")+
+  xlim(0.7, 1)+
+  scale_color_manual(name = "",
+                     #breaks = transformation,
+                     values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
+  geom_segment( aes(x=cov_99, xend=0.99, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
+  geom_point( aes(x=cov_99-1.96*se_99, y=transformation, colour=transformation), shape=91, size=5) +
+  geom_point( aes(x=cov_99+1.96*se_99, y=transformation, colour=transformation), shape=93, size=5) +
+  theme_set(theme_bw())+
+  theme(legend.position="none", axis.text.y = element_blank())+
+  labs(x = "α = 0.01", y = "")
+    
+grid.arrange(lolli_1, lolli_2, lolli_3,
+             top = "",
+             ncol = 3,
+             nrow = 1)
+
+################################
+# Results table on skewness and kurtosis
+################################
