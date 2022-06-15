@@ -1,11 +1,5 @@
 ####### V1 Simulation study
 
-# Not skewed enough?
-# How calculate Monte Carlo SE of bias for each iteration
-# What are possible explanations for our results
-# Are plots sufficient
-# Density Histograms > 1
-
 ######################################
 ### Steps
 ######################################
@@ -87,7 +81,7 @@ for (j in 1:rep_amount){
   #hist(continuous_var_2)
   
   # Create linear combination of predictor variables and intercept
-  lin_combination_train = -4.37 + continuous_var_1 + continuous_var_2
+  lin_combination_train = -3.05 + continuous_var_1 + continuous_var_2
   lin_combination_test = -4.37 + continuous_var_1 + continuous_var_2
   
   # Probability for response variable to be 1
@@ -675,9 +669,9 @@ plot_1 <- ggplot(df_hist, aes(x = theta_reg)) +
   geom_vline(aes(xintercept=mean(theta_reg)),
              color="darkred", linetype="solid", size=1)+
   theme_classic()+
-  ylim(0, 7)+
+  ylim(0, 15)+
   labs(x = "Regular O:E",
-       y = "O:E = 1")+
+       y = "O:E = 0.5")+
   theme(
     axis.title.x = element_text(color="black", size=12),
   )+
@@ -688,7 +682,7 @@ plot_2 <- ggplot(df_hist, aes(x = theta_ln)) +
   geom_vline(aes(xintercept=mean(theta_ln)),
              color="darkred", linetype="solid", size=1)+
   theme_classic()+
-  ylim(0, 7)+
+  ylim(0, 15)+
   labs(x = "Ln O:E",
        y = "")+
   theme(
@@ -701,7 +695,7 @@ plot_3 <- ggplot(df_hist, aes(x = theta_sqrt)) +
   geom_vline(aes(xintercept=mean(theta_sqrt)),
              color="darkred", linetype="solid", size=1)+
   theme_classic()+
-  ylim(0, 7)+
+  ylim(0, 15)+
   labs(x = "Square root O:E",
        y = "")+
   theme(
@@ -709,7 +703,7 @@ plot_3 <- ggplot(df_hist, aes(x = theta_sqrt)) +
   )+
   geom_density()
 
-set_plot_dimensions(16, 4)
+#set_plot_dimensions(16, 4)
 grid.arrange(plot_1, plot_2, plot_3,
              top = "",
              ncol = 3,
@@ -728,7 +722,7 @@ df_bias$index = 1:nrow(df_bias)
 sc_1 <- ggplot(df_bias, aes(x=bias_regular_n, y=index)) + 
   geom_point(size=0.5, shape=1)+
   labs(x = "Bias: Regular O:E",
-       y = "O:E = 1")+
+       y = "O:E = 0.5")+
   theme_classic()+
   geom_vline(aes(xintercept=mean(bias_regular_n)),
              color="darkred", linetype="solid", size=1.25)+
@@ -739,7 +733,7 @@ sc_1 <- ggplot(df_bias, aes(x=bias_regular_n, y=index)) +
 sc_2 <- ggplot(df_bias, aes(x=bias_log_n, y=index)) + 
   geom_point(size=0.5, shape=1)+
   labs(x = "Bias: Ln O:E",
-       y = "O:E = 1")+
+       y = "O:E = 0.5")+
   theme_classic()+
   geom_vline(aes(xintercept=mean(bias_log_n)),
              color="darkred", linetype="solid", size=1.25)+
@@ -750,7 +744,7 @@ sc_2 <- ggplot(df_bias, aes(x=bias_log_n, y=index)) +
 sc_3 <- ggplot(df_bias, aes(x=bias_sqrt_n, y=index)) + 
   geom_point(size=0.5, shape=1)+
   labs(x = "Bias: Square root O:E",
-       y = "O:E = 1")+
+       y = "O:E = 0.5")+
   theme_classic()+
   geom_vline(aes(xintercept=mean(bias_sqrt_n)),
              color="darkred", linetype="solid", size=1.25)+
@@ -764,7 +758,7 @@ sc_3 <- ggplot(df_bias, aes(x=bias_sqrt_n, y=index)) +
 
 df_se_bias = data.frame(se_bias_regular_n = diff_reg_estimate, 
                      se_bias_log_n = diff_log_estimate, 
-                     se_bias_sqrt_n = diff_sqrt_true)
+                     se_bias_sqrt_n = diff_sqrt_estimate)
 
 df_se_bias$index = 1:nrow(df_se_bias)
 
@@ -831,7 +825,7 @@ lolli_1 <- ggplot(df_cov_90) +
   geom_point( aes(x=cov_90-1.96*se_90, y=transformation, colour=transformation), shape=91, size = 5) +
   geom_point( aes(x=cov_90+1.96*se_90, y=transformation, colour=transformation), shape=93, size = 5) +
   theme_set(theme_bw())+
-  labs(x = "α = 0.1", y = "O:E Ratio = 1")+
+  labs(x = "α = 0.1", y = "O:E Ratio = 0.5")+
   theme(legend.position="none", axis.text.y = element_blank())
   
 
