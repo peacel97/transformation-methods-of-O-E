@@ -1,4 +1,4 @@
-####### V1 Simulation study
+####### V1 Simulation study 
 
 ######################################
 ### Steps
@@ -6,14 +6,15 @@
 # Generate simulation data
 # Split data
 # Prediction model
-# Calculate O:E ratio as reference
+# Calculate O/E ratio as reference
 # Ampute data of validation set
 # Multiple imputation of validaton set
 # Predict values 
-# Calculate O:E ratios for each imputed data set
+# Calculate O/E ratios for each imputed data set
 # Pool
 # Transform back
 # Repeat x times and check for each round of simulation if ratio falls into true ratio
+# Visualize results
 
 ######################################
 ### Install and load required packages
@@ -155,14 +156,14 @@ for (j in 1:rep_amount){
   # summary(fit_model_complete)
   
   ######################################
-  ## Calculate true O:E ratio
+  ## Calculate true O/E ratio
   ######################################
   
   # Define observed and expected events based on complete data
   n_observed_event = sum(test_data_complete$outcome_var == 1) #sum(test_data_complete$outcome_var == 1)
   n_expected_event = sum(train_data_complete$outcome_var == 1)#mean(fit_model_complete)*n_sample
   
-  # O:E ratio with expected event calculated based on predicted probabilities
+  # O/E ratio with expected event calculated based on predicted probabilities
   reference_oe = oecalc(
     O = n_observed_event, # numeric vector of observed events
     E = n_expected_event, # numeric vector of expected events
@@ -176,8 +177,8 @@ for (j in 1:rep_amount){
   
   # Define parameters for amputation
   myprop = c(0.3) # Choose percentage of missing cells
-  mypattern = rbind(c(0, 0, 1), c(1, 0 ,1), c(0, 1, 0)) # Choose missingness pattern (0 == missing, 1 == non-missing)
-  myfreq = c(0.3, 0.35, 0.35) # Choose relative occurence of these patterns
+  mypattern = rbind(c(1, 0, 1), c(0, 1, 1), c(0, 0, 1)) # Choose missingness pattern (0 == missing, 1 == non-missing)
+  myfreq = c(1/3, 1/3, 1/3) # Choose relative occurence of these patterns
   mymech = c("MAR") # Choose missingness mechanism (MAR based on literature)
   myweights = ampute.default.weights(mypattern, mymech) # Choose weights of weighted sum scores
   
@@ -254,10 +255,10 @@ for (j in 1:rep_amount){
   imputed_all = complete(imputation, "long")
   
   ######################################
-  ## Fit models and calculate (transformed) O:E ratios based on imputed data sets
+  ## Fit models and calculate (transformed) O/E ratios based on imputed data sets
   ######################################
   
-  # Initialize lists for O:E ratios based on imputed data sets
+  # Initialize lists for O/E ratios based on imputed data sets
   regular_oe_list = list()
   log_oe_list = list()
   sqrt_oe_list = list()
@@ -279,7 +280,7 @@ for (j in 1:rep_amount){
                                type = "response")
     summary(fit_imp)
     
-    # Calculate regular O:E and save it to list
+    # Calculate regular O/E and save it to list
     regular_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
       E = mean(fit_imp)*n_sample, #*split_prob,
@@ -288,7 +289,7 @@ for (j in 1:rep_amount){
     
     regular_oe_theta[[i]] = regular_oe_list[[i]][1]
     
-    # Calculate log O:E and save it to list
+    # Calculate log O/E and save it to list
     log_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
       E = mean(fit_imp)*n_sample, #*split_prob,
@@ -298,7 +299,7 @@ for (j in 1:rep_amount){
     
     log_oe_theta[[i]] = log_oe_list[[i]][1]
     
-    # Calculate square root O:E and save it to list
+    # Calculate square root O/E and save it to list
     sqrt_oe_list[[i]] = oecalc(
       O = sum(subset_imputed$outcome_var == 1),
       E = mean(fit_imp)*n_sample, #*split_prob,
@@ -322,7 +323,7 @@ for (j in 1:rep_amount){
   log_theta_se <- vector()
   sqrt_theta_se <- vector()
   
-  # Save the o:e values to the vectors
+  # Save the O/E values to the vectors
   for (i in 1:imp_amount){
     # theta
     regular_theta[i] <- regular_oe_list[[i]]$theta
@@ -334,7 +335,7 @@ for (j in 1:rep_amount){
     sqrt_theta_se[i] <- sqrt_oe_list[[i]]$theta.se
   }
   
-  # Pool the o:e estimates (theta) using the mean
+  # Pool the O/E estimates (theta) using the mean
   pooled_theta_regular_oe = mean(regular_theta)
   pooled_theta_log_oe = mean(log_theta)
   pooled_theta_sqrt_oe = mean(sqrt_theta)
@@ -358,7 +359,7 @@ for (j in 1:rep_amount){
     return(res)
   }
   
-  # Pool the standard errors of the o:e estimates (theta.se)
+  # Pool the standard errors of the O/E estimates (theta.se)
   pooled_se_regular_oe = pooled_se(est = regular_theta, 
                                    se = regular_theta_se, 
                                    n.imp = imp_amount
@@ -375,7 +376,7 @@ for (j in 1:rep_amount){
                                 )
   
   ######################################
-  ## Back-transformation of O:E ratios to original scale
+  ## Back-transformation of O/E ratios to original scale
   ######################################
   
   # Loop over confidence intervals
@@ -408,7 +409,7 @@ for (j in 1:rep_amount){
       )
   
   ######################################
-  ## Compare performance of O:E measures with reference O:E measure
+  ## Compare performance of O/E measures with reference O/E measure
   ######################################
   
   # Sub-sample of reference_oe to theta
@@ -440,7 +441,7 @@ for (j in 1:rep_amount){
   all_log_theta[[j]] = (exp(pooled_theta_log_oe))
   all_sqrt_theta[[j]] = ((pooled_theta_sqrt_oe)^2)
   
-  # Save transformed O:E ratios based on imputed data set prior to pooling to check for improvement of normality shape
+  # Save transformed O/E ratios based on imputed data set prior to pooling to check for improvement of normality shape
   distribution_prior_reg[[j]] = regular_oe_theta
   distribution_prior_log[[j]] = log_oe_theta
   distribution_prior_sqrt[[j]] = sqrt_oe_theta
@@ -450,10 +451,10 @@ for (j in 1:rep_amount){
 ## Calculations after the Simulation study
 ######################################
 
-# Print tables of transformed O:E ratios of each iteration
+# Print tables of transformed O/E ratios of each iteration
 print(result_table)
 
-# Calculate true O:E ratio as mean of 1:rep_amount reference O:E ratio
+# Calculate true O/E ratio as mean of 1:rep_amount reference O/E ratio
 mean_true_oe = (sum(unlist(all_true_oe)))/rep_amount
 
 # Initialize vectors for loop
@@ -490,7 +491,7 @@ for (j in 1:rep_amount){
     res_sqrt_99[j] = isTRUE(result_table[[j]][[3]][4,3] < mean_true_oe & mean_true_oe < result_table[[j]][[3]][4,4])
 }
 
-# Calculate percentage of how often true O:E falls into CI of respective O:E measure at level 0.9, 0.95, 0.99
+# Calculate percentage of how often true O/E falls into CI of respective O/E measure at level 0.9, 0.95, 0.99
 percentage_coverage_regular_90 = table(res_regular_90)["TRUE"]/rep_amount
 percentage_coverage_log_90 = table(res_log_90)["TRUE"]/rep_amount
 percentage_coverage_sqrt_90 = table(res_sqrt_90)["TRUE"]/rep_amount
@@ -580,226 +581,136 @@ se_bias_reg = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_reg_estimate))
 se_bias_log = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_log_estimate))
 se_bias_sqrt = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_sqrt_estimate))
 
-# ################################
-# # Visualizations: Distribution True O:E
-# ################################
-# 
-# df_true_oe = as.data.frame(unlist(all_true_oe))
-# names(df_true_oe)[1] = "true_oe"
-# 
-# plot_true_oe <- ggplot(df_true_oe, aes(x = true_oe)) + 
-#   geom_histogram(aes(y = ..density..), bins=40, color="black", fill="white") +
-#   geom_vline(aes(xintercept=mean(true_oe)),
-#              color="darkred", linetype="solid", size=1.25)+
-#   theme_classic()+
-#   labs(x = "True O:E",
-#        y = "Density")+
-#   theme(
-#     axis.title.x = element_text(color="black", size=12),
-#   )+
-#   geom_density()
-# 
-# ################################
-# # Visualizations: Histograms prior to pooling based on multiple imputed data sets
-# ################################
-# 
-# ## Histogram of regular O:E prior to pooling based on multiple imputed data sets
-# df_prior_reg = as.data.frame(unlist(distribution_prior_reg))
-# names(df_prior_reg)[1] = "prior_reg"
-# 
-# prior_plot_reg <- ggplot(df_prior_reg, aes(x = prior_reg)) + 
-#   geom_histogram(aes(y = ..density..), bins=40, color="black", fill="white") +
-#   geom_vline(aes(xintercept=mean(prior_reg)),
-#              color="darkred", linetype="solid", size=1.25)+
-#   theme_classic()+
-#   labs(x = "Regular O:E",
-#        y = "Density")+
-#   theme(
-#     axis.title.x = element_text(color="black", size=12),
-#   )+
-#   geom_density()
-#
-## Histogram of ln O:E prior to pooling based on multiple imputed data sets
-# df_prior_log = as.data.frame(unlist(distribution_prior_log))
-# names(df_prior_log)[1] = "prior_log"
-# 
-# prior_plot_log <- ggplot(df_prior_log, aes(x = prior_log)) + 
-#   geom_histogram(aes(y = ..density..), bins=40, color="black", fill="white") +
-#   geom_vline(aes(xintercept=mean(prior_log)),
-#              color="darkred", linetype="solid", size=1.25)+
-#   theme_classic()+
-#   labs(x = "Ln O:E",
-#        y = "Density")+
-#   theme(
-#     axis.title.x = element_text(color="black", size=12),
-#   )+
-#   geom_density()
-# 
-# ## Histogram of square root O:E prior to pooling based on multiple imputed data sets
-# df_prior_sqrt = as.data.frame(unlist(distribution_prior_sqrt))
-# names(df_prior_sqrt)[1] = "prior_sqrt"
-# 
-# prior_plot_sqrt <- ggplot(df_prior_sqrt, aes(x = prior_sqrt)) + 
-#   geom_histogram(aes(y = ..density..), bins=40, color="black", fill="white") +
-#   geom_vline(aes(xintercept=mean(prior_sqrt)),
-#              color="darkred", linetype="solid", size=1.25)+
-#   theme_classic()+
-#   labs(x = "Square root O:E",
-#        y = "Density")+
-#   theme(
-#     axis.title.x = element_text(color="black", size=12),
-#   )+
-#   geom_density()
-# 
-# # Combine plots to one overall plot
-# grid.arrange(prior_plot_reg, prior_plot_log, prior_plot_sqrt,
-#              top = "",
-#              nrow = 3,
-#              ncol = 1)
-
 ################################
-# Visualizations: Histograms posterior to pooling
+# Visualizations: Histograms of pooled estimates
 ################################
 df_hist <- data.frame(theta_reg = unlist(all_regular_theta),
                       theta_ln = unlist(all_log_theta),
                       theta_sqrt = unlist(all_sqrt_theta))
 
 plot_1 <- ggplot(df_hist, aes(x = theta_reg)) + 
-  geom_histogram(aes(y = ..density..), bins=70, color="black", fill="white") +
-  geom_vline(aes(xintercept=mean(theta_reg)),
-             color="darkred", linetype="solid", size=1)+
+  geom_histogram(aes(y = ..density..), bins=50, color="azure4", fill="white") +
+  geom_vline(aes(xintercept=mean(theta_reg)), 
+             color="darkred", linetype="solid", size=0.5)+
+  geom_vline(aes(xintercept=mean_true_oe), 
+             color="darkblue", linetype="solid", size=0.5)+
   theme_classic()+
   ylim(0, 15)+
-  labs(x = "Regular O:E",
-       y = "O:E = 0.5")+
+  labs(x = "Regular O/E",
+       y = "O/E ≈ 0.5")+
   theme(
     axis.title.x = element_text(color="black", size=12),
   )+
-  geom_density()
+  geom_density(color="black")+
+  theme(text=element_text(family="Times New Roman"))
 
 plot_2 <- ggplot(df_hist, aes(x = theta_ln)) + 
-  geom_histogram(aes(y = ..density..), bins=70, color="black", fill="white") +
+  geom_histogram(aes(y = ..density..), bins=50, color="azure4", fill="white") +
   geom_vline(aes(xintercept=mean(theta_ln)),
-             color="darkred", linetype="solid", size=1)+
+             color="darkred", linetype="solid", size=0.5)+
+  geom_vline(aes(xintercept=mean_true_oe),
+             color="darkblue", linetype="solid", size=0.5)+
   theme_classic()+
   ylim(0, 15)+
-  labs(x = "Ln O:E",
+  labs(x = "Ln O/E",
        y = "")+
   theme(
     axis.title.x = element_text(color="black", size=12),
   )+
-  geom_density()
+  geom_density(color="black")+
+  theme(text=element_text(family="Times New Roman"))
 
 plot_3 <- ggplot(df_hist, aes(x = theta_sqrt)) + 
-  geom_histogram(aes(y = ..density..), bins=70, color="black", fill="white") +
+  geom_histogram(aes(y = ..density..), bins=50, color="azure4", fill="white") +
   geom_vline(aes(xintercept=mean(theta_sqrt)),
-             color="darkred", linetype="solid", size=1)+
+             color="darkred", linetype="solid", size=0.5)+
+  geom_vline(aes(xintercept=mean_true_oe),
+             color="darkblue", linetype="solid", size=0.5)+
   theme_classic()+
   ylim(0, 15)+
-  labs(x = "Square root O:E",
+  labs(x = "Square root O/E",
        y = "")+
   theme(
     axis.title.x = element_text(color="black", size=12),
   )+
-  geom_density()
+  geom_density(color = "black")+
+  theme(text=element_text(family="Times New Roman"))
 
-#set_plot_dimensions(16, 4)
+# size: 900*300
 grid.arrange(plot_1, plot_2, plot_3,
              top = "",
              ncol = 3,
              nrow = 1)
 
 ################################
-# Visualizations: Scatterplot on bias
+# Visualizations: Scatterplot on difference of theta to mean and to true oe
 ################################
-df_bias = data.frame(bias_regular_n = diff_reg_true, 
-                     bias_log_n = diff_log_true, 
-                     bias_sqrt_n = diff_sqrt_true)
+df_diff = data.frame(diff_reg_true, 
+                     diff_log_true, 
+                     diff_sqrt_true)
 
-df_bias$index = 1:nrow(df_bias)
+df_diff$index = 1:nrow(df_diff)
 
-
-sc_1 <- ggplot(df_bias, aes(x=bias_regular_n, y=index)) + 
-  geom_point(size=0.5, shape=1)+
-  labs(x = "Bias: Regular O:E",
-       y = "O:E = 0.5")+
+sc_1 <- ggplot(df_diff, aes(x=diff_reg_true, y=index)) + 
+  geom_point(color = "azure4", size=0.1, shape=20, alpha = 0.5)+
+  labs(x = "Regular O/E",
+       y = "O/E ≈ 0.5")+
   theme_classic()+
-  geom_vline(aes(xintercept=mean(bias_regular_n)),
-             color="darkred", linetype="solid", size=1.25)+
+  geom_vline(aes(xintercept=mean(diff_reg_true)), # bias
+             color="darkred", linetype="solid", size=0.5)+
+  geom_vline(aes(xintercept=mean(diff_reg_true)-1.96*se_bias_reg), # monte carlo se of bias: bias-1.96*monte carlo se
+             color="darkred", linetype="dashed", size=0.5)+
+  geom_vline(aes(xintercept=mean(diff_reg_true)+1.96*se_bias_reg), # monte carlo se of bias: bias+1.96*monte carlo se
+             color="darkred", linetype="dashed", size=0.5)+
+  geom_vline(aes(xintercept=0), # true
+             color="darkblue", linetype="solid", size=0.5)+
   theme(
     axis.title.x = element_text(color="black", size=12),
-  )
+  )+
+  theme(text=element_text(family="Times New Roman"))
 
-sc_2 <- ggplot(df_bias, aes(x=bias_log_n, y=index)) + 
-  geom_point(size=0.5, shape=1)+
-  labs(x = "Bias: Ln O:E",
-       y = "O:E = 0.5")+
+sc_2 <- ggplot(df_diff, aes(x=diff_log_true, y=index)) + 
+  geom_point(color = "azure4", size=0.1, shape=20, alpha = 0.5)+
+  labs(x = "Ln O/E",
+       y = "O/E ≈ 0.5")+
   theme_classic()+
-  geom_vline(aes(xintercept=mean(bias_log_n)),
-             color="darkred", linetype="solid", size=1.25)+
+  geom_vline(aes(xintercept=mean(diff_log_true)), # bias
+             color="darkred", linetype="solid", size=0.5)+
+  geom_vline(aes(xintercept=mean(diff_log_true)-1.96*se_bias_reg), # monte carlo se of bias: bias-1.96*monte carlo se
+             color="darkred", linetype="dashed", size=0.5)+
+  geom_vline(aes(xintercept=mean(diff_log_true)+1.96*se_bias_reg), # monte carlo se of bias: bias+1.96*monte carlo se
+             color="darkred", linetype="dashed", size=0.5)+
+  geom_vline(aes(xintercept=0), # true
+             color="darkblue", linetype="solid", size=0.5)+
   theme(
     axis.title.x = element_text(color="black", size=12),
-  )
+  )+
+  theme(text=element_text(family="Times New Roman"))
 
-sc_3 <- ggplot(df_bias, aes(x=bias_sqrt_n, y=index)) + 
-  geom_point(size=0.5, shape=1)+
-  labs(x = "Bias: Square root O:E",
-       y = "O:E = 0.5")+
+sc_3 <- ggplot(df_diff, aes(x=diff_sqrt_true, y=index)) + 
+  geom_point(color = "azure4", size=0.05, shape=20, alpha = 0.5)+
+  labs(x = "Square root O/E",
+       y = "O/E ≈ 0.5")+
   theme_classic()+
-  geom_vline(aes(xintercept=mean(bias_sqrt_n)),
-             color="darkred", linetype="solid", size=1.25)+
+  geom_vline(aes(xintercept=mean(diff_sqrt_true)), # bias
+             color="darkred", linetype="solid", size=0.5)+
+  geom_vline(aes(xintercept=mean(diff_sqrt_true)-1.96*se_bias_reg), # monte carlo se of bias: bias-1.96*monte carlo se
+             color="darkred", linetype="dashed", size=0.5)+
+  geom_vline(aes(xintercept=mean(diff_sqrt_true)+1.96*se_bias_reg), # monte carlo se of bias: bias+1.96*monte carlo se
+             color="darkred", linetype="dashed", size=0.5)+
+  geom_vline(aes(xintercept=0), # true
+             color="darkblue", linetype="solid", size=0.5)+
   theme(
     axis.title.x = element_text(color="black", size=12),
-  )
+  )+
+  theme(text=element_text(family="Times New Roman"))
 
-################################
-# Visualizations: Scatterplot on monte carlo se of bias
-################################
-
-df_se_bias = data.frame(se_bias_regular_n = diff_reg_estimate, 
-                     se_bias_log_n = diff_log_estimate, 
-                     se_bias_sqrt_n = diff_sqrt_estimate)
-
-df_se_bias$index = 1:nrow(df_se_bias)
-
-sc_se_1 <- ggplot(df_se_bias, aes(x=se_bias_regular_n, y=index)) + 
-  geom_point(size=0.5, shape=1)+
-  labs(x = "SE: Regular O:E",
-       y = "")+
-  theme_classic()+
-  geom_vline(aes(xintercept=se_bias_reg),
-             color="darkred", linetype="solid", size=1.25)+
-  theme(
-    axis.title.x = element_text(color="black", size=12),
-  )
-
-sc_se_2 <- ggplot(df_se_bias, aes(x=se_bias_log_n, y=index)) + 
-  geom_point(size=0.5, shape=1)+
-  labs(x = "SE: Ln O:E",
-       y = "")+
-  theme_classic()+
-  geom_vline(aes(xintercept=se_bias_log),
-             color="darkred", linetype="solid", size=1.25)+
-  theme(
-    axis.title.x = element_text(color="black", size=12),
-  )
-
-sc_se_3 <- ggplot(df_se_bias, aes(x=se_bias_sqrt_n, y=index)) + 
-  geom_point(size=0.5, shape=1)+
-  labs(x = "SE: Square root O:E",
-       y = "")+
-  theme_classic()+
-  geom_vline(aes(xintercept=se_bias_sqrt),
-             color="darkred", linetype="solid", size=1.25)+
-  theme(
-    axis.title.x = element_text(color="black", size=12),
-  )
-
-grid.arrange(sc_1, sc_se_1,
-             sc_2, sc_se_2,
-             sc_3, sc_se_3,
+# size: 600*350
+grid.arrange(sc_1,
+             sc_2,
+             sc_3,
              top = "",
-             ncol = 2,
+             ncol = 1,
              nrow = 3)
 
 ################################
@@ -819,14 +730,14 @@ lolli_1 <- ggplot(df_cov_90) +
   geom_vline(xintercept = 0.9, color = "black")+
   xlim(0.7, 1)+
   scale_color_manual(name = "",
-                     #breaks = transformation,
                      values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
   geom_segment( aes(x=cov_90, xend=0.9, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
   geom_point( aes(x=cov_90-1.96*se_90, y=transformation, colour=transformation), shape=91, size = 5) +
   geom_point( aes(x=cov_90+1.96*se_90, y=transformation, colour=transformation), shape=93, size = 5) +
   theme_set(theme_bw())+
-  labs(x = "α = 0.1", y = "O:E Ratio = 0.5")+
-  theme(legend.position="none", axis.text.y = element_blank())
+  labs(x = "α = 0.1", y = "O/E ≈ 0.5")+
+  theme(legend.position="none", axis.text.y = element_blank())+
+  theme(text=element_text(family="Times New Roman"))
   
 
 # df Coverage at alpha = 0.05
@@ -841,14 +752,14 @@ lolli_2 <- ggplot(df_cov_95) +
   geom_vline(xintercept = 0.95, color = "black")+
   xlim(0.7, 1)+
   scale_color_manual(name = "",
-                     #breaks = transformation,
                      values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
   geom_segment( aes(x=cov_95, xend=0.95, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
   geom_point( aes(x=cov_95-1.96*se_95, y=transformation, colour=transformation), shape=91, size = 5) +
   geom_point( aes(x=cov_95+1.96*se_95, y=transformation, colour=transformation), shape=93, size = 5) +
   theme_set(theme_bw())+
   theme(legend.position="none", axis.text.y = element_blank())+
-  labs(x = "α = 0.05", y = "")
+  labs(x = "α = 0.05", y = "")+
+  theme(text=element_text(family="Times New Roman"))
 
 # df Coverage at alpha = 0.01
 df_cov_99 = data.frame(
@@ -862,20 +773,17 @@ lolli_3 <- ggplot(df_cov_99) +
   geom_vline(xintercept = 0.99, color = "black")+
   xlim(0.7, 1)+
   scale_color_manual(name = "",
-                     #breaks = transformation,
                      values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
   geom_segment( aes(x=cov_99, xend=0.99, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
   geom_point( aes(x=cov_99-1.96*se_99, y=transformation, colour=transformation), shape=91, size=5) +
   geom_point( aes(x=cov_99+1.96*se_99, y=transformation, colour=transformation), shape=93, size=5) +
   theme_set(theme_bw())+
   theme(legend.position="none", axis.text.y = element_blank())+
-  labs(x = "α = 0.01", y = "")
-    
+  labs(x = "α = 0.01", y = "")+
+  theme(text=element_text(family="Times New Roman"))
+
+# size: 800*200   
 grid.arrange(lolli_1, lolli_2, lolli_3,
              top = "",
              ncol = 3,
              nrow = 1)
-
-################################
-# Results table on skewness and kurtosis
-################################
