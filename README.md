@@ -1,5 +1,4 @@
-# Evaluation of transformation methods of the observed:expected
-ratio in multiple imputation settings for validating prediction models
+# Evaluation of transformation methods of the observed:expected ratio in multiple imputation settings for validating prediction models
 
 Abstract: Measuring the calibration is essential for validation of clinical prediction models. However, 
 missing data is a common issue which can complicate the measurement of calibration
