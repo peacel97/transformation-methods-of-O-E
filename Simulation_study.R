@@ -1,23 +1,29 @@
-####### V1 Simulation study 
+####### Simulation study 
 
 ######################################
-### Steps
+### Steps of the simulation
 ######################################
-# Generate simulation data
-# Split data
-# Prediction model
-# Calculate O/E ratio as reference
-# Ampute data of validation set
-# Multiple imputation of validaton set
-# Predict values 
-# Calculate O/E ratios for each imputed data set
-# Pool
-# Transform back
-# Repeat x times and check for each round of simulation if ratio falls into true ratio
-# Visualize results
+# 0.  Install and load required packages
+# 1.  Generate simulation data
+# 2.  Develop prediction model
+# 3.  Calculate true O/E ratio
+# 4.1 Ampute data of validation data
+# 4.2 Evaluation of data amputation procedure
+# 5.  Multiple imputation
+# 6.  Fit models and calculate (transformed) O/E ratios based on imputed data sets
+# 7.  Pooling procedure
+# 8.  Back-transformation of O/E ratios to original scale
+# 9.  Compare performance of transformed O/E statistic to true O/E measure
+# 10. Save results for each study repetition
+# 11. Prepare performance evaluation for all k study repetitions
+# 12.1 Results of coverage and MCSE in table
+# 12.2 Results of bias and MCSE in table
+# 13.1 Visualization of distribution of pooled estimates
+# 13.2 Visualization of coverage of CI
+# 13.3 Visualization of bias
 
 ######################################
-### Install and load required packages
+### 0.  Install and load required packages
 ######################################
 
 ## Specify required packages
@@ -45,7 +51,7 @@ package.check <- lapply(
 )
 
 ######################################
-## Generate data
+## 1.  Generate simulation data
 ######################################
 
 ## Set seed to get reproducible results
@@ -74,15 +80,13 @@ for (j in 1:rep_amount){
 
   # Continuous predictor variables
   continuous_var_1 = rnorm(n = n_sample, mean = 2, sd = 0.5)
-  #summary(continuous_var_1)
-  #hist(continuous_var_1)
-  
   continuous_var_2 = rnorm(n = n_sample, mean = 1.5, sd = 0.25)
-  #summary(continuous_var_2)
-  #hist(continuous_var_2)
   
-  # Create linear combination of predictor variables and intercept
-  lin_combination_train = -3.926 + continuous_var_1 + continuous_var_2
+  # Create linear combination of predictor variables with imbalanced classification
+  # For true O:E = 0.5; intercept validation data = -3.926
+  # For true O:E = 1; intercept validation data = -4.970
+  # For true O:E = 2; intercept validation data = -5.815
+  lin_combination_train = -4.970 + continuous_var_1 + continuous_var_2
   lin_combination_test = -4.970 + continuous_var_1 + continuous_var_2
   
   # Probability for response variable to be 1
@@ -91,25 +95,13 @@ for (j in 1:rep_amount){
   prob_outcome_test = 1/(1+exp(-lin_combination_test))
   
   # Check that values are not approaching either 0 or 1 to avoid too deterministic approach
-  # too close to zero?
   summary(prob_outcome_train)
   summary(prob_outcome_test)
   
   # Binary outcome variable as Bernoulli response variable
-  # Note: Imbalanced Classification, desired probability for outcome_var = 1 between 20% and 30%
   outcome_var_train = rbinom(n = n_sample, size = 1, prob = prob_outcome_train)
   outcome_var_test = rbinom(n = n_sample, size = 1, prob = prob_outcome_test)
-  #summary(outcome_var)
-  #summary(outcome_var)
-  #hist(outcome_var)
-  
-  # Additional noise
-  # noise_param.1 = sample(seq_len(floor(length(outcome_var_train[outcome_var_train==1])*0.25)))
-  # noise_param.0 = sample(seq_len(floor(length(outcome_var_train[outcome_var_train==0])*0.25)))
-  # 
-  # noise_param.1 = sample(seq_len(floor(length(outcome_var_test[outcome_var_test==1])*0.00)))
-  # noise_param.0 = sample(seq_len(floor(length(outcome_var_test[outcome_var_test==0])*0.00)))
-  
+
   # Combine it to a data frame
   train_data_complete = data.frame(
               continuous_var_1,
@@ -122,26 +114,12 @@ for (j in 1:rep_amount){
     continuous_var_2,
     outcome_var = outcome_var_test
   )
-  
-  # train_data_complete$outcome_var[noise_param.0] = 1
-  # train_data_complete$outcome_var[noise_param.1] = 0
-  # 
-  # test_data_complete$outcome_var[noise_param.0] = 1
-  # test_data_complete$outcome_var[noise_param.1] = 0
 
   ######################################
-  ## Split data and develop prediction model
+  ## 2.  Develop prediction model
   ######################################
   
-  # Split data into test and training data
-  # split_prob = c(0.5)
-  # training_samples_complete <- df_complete$outcome_var %>%
-  #   createDataPartition(p = split_prob, list = FALSE)
-  # 
-  # train_data_complete = df_complete[training_samples_complete, ]
-  # test_data_complete = df_complete[-training_samples_complete, ]
-
-  # Create multiple logistic regression model based on complete data
+  # develop prediction model based on development data
   model_complete = glm(outcome_var ~ continuous_var_1 + continuous_var_2, 
                        data = train_data_complete,
                        family = binomial
@@ -149,12 +127,12 @@ for (j in 1:rep_amount){
   summary(model_complete)$coef
   
   ######################################
-  ## Calculate true O/E ratio
+  ## 3.  Calculate true O/E ratio
   ######################################
   
   # Define observed and expected events based on complete data
-  n_observed_event = sum(test_data_complete$outcome_var == 1) #sum(test_data_complete$outcome_var == 1)
-  n_expected_event = sum(train_data_complete$outcome_var == 1)#mean(fit_model_complete)*n_sample
+  n_observed_event = sum(test_data_complete$outcome_var == 1) 
+  n_expected_event = sum(train_data_complete$outcome_var == 1)
   
   # O/E ratio with expected event calculated based on predicted probabilities
   reference_oe = oecalc(
@@ -165,7 +143,7 @@ for (j in 1:rep_amount){
   reference_oe
   
   ######################################
-  ## Ampute test data 
+  ## 4.1 Ampute data of validation data
   ######################################
   
   # Define parameters for amputation
@@ -176,7 +154,7 @@ for (j in 1:rep_amount){
   myweights = ampute.default.weights(mypattern, mymech) # Choose weights of weighted sum scores
   
   # Carry out amputation replacing it by NA
-  # Note for interpretation: Proportion of missingness in terms of cells not in terms of cases
+  # Note: Proportion of missingness in terms of cells not in terms of cases
   amputation = ampute(data = test_data_complete,
                       patterns = mypattern,
                       prop = myprop, 
@@ -190,7 +168,7 @@ for (j in 1:rep_amount){
   df_amputed = amputation$amp
   
   ######################################
-  ## Evaluation of data amputation procedure
+  ## 4.2 Evaluation of data amputation procedure
   ######################################
   
   # Show that amputation has worked
@@ -215,7 +193,7 @@ for (j in 1:rep_amount){
   summary(model_complete)$coef
   
   ######################################
-  ## Perform multiple imputation
+  ## 5.  Multiple imputation
   ######################################
   
   # Choose number of imputed data sets (reasonably between 5 and 10)
@@ -226,7 +204,6 @@ for (j in 1:rep_amount){
   
   # Choose imputation method
   # Interpretation: pmm default method for numeric data; logreg method for binary data
-  # change to norm for smaller CI in results
   imp_method = c("pmm", "pmm", "logreg") 
   
   # Outcome variable as categorical variable for imp_method logreg
@@ -244,11 +221,10 @@ for (j in 1:rep_amount){
   plot(imputation)
   
   # Save the imputed data sets
-  # Note: alternative save as list of df
   imputed_all = complete(imputation, "long")
   
   ######################################
-  ## Fit models and calculate (transformed) O/E ratios based on imputed data sets
+  ## 6.  Fit models and calculate (transformed) O/E ratios based on imputed data sets
   ######################################
   
   # Initialize lists for O/E ratios based on imputed data sets
@@ -304,7 +280,7 @@ for (j in 1:rep_amount){
   }
   
   ######################################
-  ## Pooling procedure
+  ## 7.  Pooling procedure
   ######################################
   
   # Initialize vectors for theta and theta.se
@@ -334,7 +310,7 @@ for (j in 1:rep_amount){
   pooled_theta_sqrt_oe = mean(sqrt_theta)
   
   # Function to pool standard errors and receive respective t-values
-  # Source: Epi and Big Data course
+  # Formula based on: Epi and Big Data course
   # Note: Write new with less redundance as some variables already defined
   pooled_se <- function(est, se, n.imp){
     Qbar <- mean(est)
@@ -353,47 +329,50 @@ for (j in 1:rep_amount){
   }
   
   # Pool the standard errors of the O/E estimates (theta.se)
+  # SE of regular method
   pooled_se_regular_oe = pooled_se(est = regular_theta, 
                                    se = regular_theta_se, 
                                    n.imp = imp_amount
                                      )
-  
+  # SE of natural log method
   pooled_se_log_oe = pooled_se(est = log_theta, 
                                se = log_theta_se,
                                n.imp = imp_amount
                                )
-    
+  # SE of square root method   
   pooled_se_sqrt_oe = pooled_se(est = sqrt_theta, 
                                 se = sqrt_theta_se,
                                 n.imp = imp_amount
                                 )
   
   ######################################
-  ## Back-transformation of O/E ratios to original scale
+  ## 8.  Back-transformation of O/E ratios to original scale
   ######################################
-  
-  # Loop over confidence intervals
-  # Initialize [1] == 90%CI, [2] == 95%CI, [3] == 99%CI
+
+  # Initialize lists
   oe_comparison = list() 
   final_regular_oe = list()
   final_log_oe = list()
   final_sqrt_oe = list()
   
+  # Loop over confidence intervals
+  # Note: [1] == 90%CI, [2] == 95%CI, [3] == 99%CI
   for (k in 1:3){
+    # regular method
     final_regular_oe[[k]] = cbind(
       theta = pooled_theta_regular_oe,
       theta.se = pooled_se_regular_oe[4],
       theta.cilb = pooled_theta_regular_oe - pooled_se_regular_oe[k]*pooled_se_regular_oe[4],
       theta.ciub = pooled_theta_regular_oe + pooled_se_regular_oe[k]*pooled_se_regular_oe[4]
       )
-    
+    # natural log method
     final_log_oe[[k]] = cbind(
       theta = exp(pooled_theta_log_oe), 
       theta.se = pooled_se_log_oe[4],
       theta.cilb = exp(pooled_theta_log_oe - pooled_se_log_oe[k]*pooled_se_log_oe[4]),
       theta.ciub = exp(pooled_theta_log_oe + pooled_se_log_oe[k]*pooled_se_log_oe[4])
       )
-  
+    # square root method
     final_sqrt_oe[[k]] = cbind(
       theta =(pooled_theta_sqrt_oe)^2, 
       theta.se = pooled_se_sqrt_oe[4],
@@ -402,7 +381,7 @@ for (j in 1:rep_amount){
       )
   
   ######################################
-  ## Compare performance of O/E measures with reference O/E measure
+  ## 9. Compare performance of transformed O/E statistic to true O/E measure
   ######################################
   
   # Sub-sample of reference_oe to theta
@@ -415,14 +394,14 @@ for (j in 1:rep_amount){
                         final_log_oe[[k]], 
                         final_sqrt_oe[[k]]
                         )
-  
+  # Save
   oe_comparison[[k]] = as.data.frame(oe_comparison[[k]])
   rownames(oe_comparison[[k]]) <- c("true o:e", "regular o:e", "ln o:e", "sqrt o:e")
   
   }  
 
   ######################################
-  ## Study repetition
+  ## 10. Save results for each study repetition
   ######################################
 
   # Save general results
@@ -441,7 +420,7 @@ for (j in 1:rep_amount){
 }
 
 ######################################
-## Calculations after the Simulation study
+## 11. Prepare performance evaluation for all k study repetitions
 ######################################
 
 # Print tables of transformed O/E ratios of each iteration
@@ -498,89 +477,96 @@ percentage_coverage_log_99 = table(res_log_99)["TRUE"]/rep_amount
 percentage_coverage_sqrt_99 = table(res_sqrt_99)["TRUE"]/rep_amount
 
 ######################################
-## Results: Table of coverage rate in %
+## 12.1 Results of coverage and MCSE in table
 ######################################
 
+# coverage probabilites of regular method
 coverage_regular = cbind(percentage_coverage_regular_90,
                          percentage_coverage_regular_95,
                          percentage_coverage_regular_99)
 
+# coverage probabilites of natural log method
 coverage_log = cbind(percentage_coverage_log_90,
                      percentage_coverage_log_95,
                      percentage_coverage_log_99)
 
+# coverage probabilites of square root method
 coverage_sqrt = cbind(percentage_coverage_sqrt_90,
                       percentage_coverage_sqrt_95,
                       percentage_coverage_sqrt_99)
 
+# combine to df table
 coverage_table = rbind(coverage_regular,
                        coverage_log,
                        coverage_sqrt)
-
 coverage_table = as.data.frame(coverage_table)
 rownames(coverage_table) <- c("Regular O:E Ratio", "Ln O:E Ratio", "Sqrt O:E Ratio")
 names(coverage_table)[1] = "CI 0.90"
 names(coverage_table)[2] = "CI 0.95"
 names(coverage_table)[3] = "CI 0.99"
 
+# show coverage table
 print(coverage_table)
 
-######################################
-## Results: Monte Carlo error of coverage rate
-######################################
+# monte carlo standard error for coverage of regular method
 se_reg_90 = (sqrt((coverage_table[1,1]*(1-coverage_table[1,1])/rep_amount)))
 se_reg_95 = (sqrt((coverage_table[1,2]*(1-coverage_table[1,2])/rep_amount)))
 se_reg_99 = (sqrt((coverage_table[1,3]*(1-coverage_table[1,3])/rep_amount)))
   
+# monte carlo standard erros for coverage of natural log method
 se_log_90 = (sqrt((coverage_table[2,1]*(1-coverage_table[2,1])/rep_amount)))
 se_log_95 = (sqrt((coverage_table[2,2]*(1-coverage_table[2,2])/rep_amount)))
 se_log_99 = (sqrt((coverage_table[2,3]*(1-coverage_table[2,3])/rep_amount)))
-  
+
+# monte carlo standard erros for coverage of square root method
 se_sqrt_90 = (sqrt((coverage_table[3,1]*(1-coverage_table[3,1])/rep_amount)))
 se_sqrt_95 = (sqrt((coverage_table[3,2]*(1-coverage_table[3,2])/rep_amount)))
 se_sqrt_99 = (sqrt((coverage_table[3,3]*(1-coverage_table[3,3])/rep_amount)))
 
 ################################
-# Results: Table of Bias
+## 12.2 Results of bias and MCSE in table
 ################################
+
+# Initialize vectors
 diff_reg_true = vector()
 diff_log_true = vector()
 diff_sqrt_true = vector()
+diff_reg_estimate = vector()
+diff_log_estimate = vector()
+diff_sqrt_estimate = vector()
 
+# calculate difference from point estimate to true o/e
 for (j in 1:rep_amount){
 diff_reg_true[[j]] = all_regular_theta[[j]] - mean_true_oe
 diff_log_true[[j]] = all_log_theta[[j]] - mean_true_oe
 diff_sqrt_true[[j]] = all_sqrt_theta[[j]] - mean_true_oe
 }
 
+# bias of the estimates
 bias_regular = sum(diff_reg_true)/rep_amount
 bias_log = sum(diff_log_true)/rep_amount
 bias_sqrt = sum(diff_sqrt_true)/rep_amount
 
-######################################
-## Results: Monte Carlo error of bias
-######################################
-diff_reg_estimate = vector()
-diff_log_estimate = vector()
-diff_sqrt_estimate = vector()
-
+# monte carlo standard errors for bias
 for (j in 1:rep_amount){
   diff_reg_estimate[[j]] = (all_regular_theta[[j]] - mean(unlist(all_regular_theta)))^2
   diff_log_estimate[[j]] = (all_log_theta[[j]] - mean(unlist(all_regular_theta)))^2
   diff_sqrt_estimate[[j]] = (all_sqrt_theta[[j]] - mean(unlist(all_regular_theta)))^2
 }
-
 se_bias_reg = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_reg_estimate))
 se_bias_log = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_log_estimate))
 se_bias_sqrt = sqrt((1/(rep_amount*(rep_amount-1)))*sum(diff_sqrt_estimate))
 
 ################################
-# Visualizations: Histograms of pooled estimates
+# 13.1 Visualization of distribution of pooled estimates
 ################################
+
+# prepare data
 df_hist <- data.frame(theta_reg = unlist(all_regular_theta),
                       theta_ln = unlist(all_log_theta),
                       theta_sqrt = unlist(all_sqrt_theta))
 
+# density histogram for regular O/E
 plot_1 <- ggplot(df_hist, aes(x = theta_reg)) + 
   geom_histogram(aes(y = ..density..), bins=50, color="azure4", fill="white") +
   geom_vline(aes(xintercept=mean(theta_reg)), 
@@ -589,13 +575,14 @@ plot_1 <- ggplot(df_hist, aes(x = theta_reg)) +
              color="darkblue", linetype="solid", size=0.5)+
   theme_classic()+
   labs(x = "Regular O/E",
-       y = "O/E ≈ 0.5")+
+       y = "")+ # add respective true O/E for label
   theme(
     axis.title.x = element_text(color="black", size=12),
   )+
   geom_density(color="black")+
   theme(text=element_text(family="Times New Roman"))
 
+# density histogram for natural log O/E
 plot_2 <- ggplot(df_hist, aes(x = theta_ln)) + 
   geom_histogram(aes(y = ..density..), bins=50, color="azure4", fill="white") +
   geom_vline(aes(xintercept=mean(theta_ln)),
@@ -611,6 +598,7 @@ plot_2 <- ggplot(df_hist, aes(x = theta_ln)) +
   geom_density(color="black")+
   theme(text=element_text(family="Times New Roman"))
 
+# density histogram for square root O/E
 plot_3 <- ggplot(df_hist, aes(x = theta_sqrt)) + 
   geom_histogram(aes(y = ..density..), bins=50, color="azure4", fill="white") +
   geom_vline(aes(xintercept=mean(theta_sqrt)),
@@ -626,25 +614,29 @@ plot_3 <- ggplot(df_hist, aes(x = theta_sqrt)) +
   geom_density(color = "black")+
   theme(text=element_text(family="Times New Roman"))
 
-# size: 900*300
+# combine density histograms
+# Note: size 900*300
 grid.arrange(plot_1, plot_2, plot_3,
              top = "",
              ncol = 3,
              nrow = 1)
 
 ################################
-# Visualizations: Scatterplot on difference of theta to mean and to true oe
+## 13.2 Visualization of bias
 ################################
+
+# prepare data
 df_diff = data.frame(diff_reg_true, 
                      diff_log_true, 
                      diff_sqrt_true)
 
 df_diff$index = 1:nrow(df_diff)
 
+# scatterplot for regular method
 sc_1 <- ggplot(df_diff, aes(x=diff_reg_true, y=index)) + 
   geom_point(color = "azure4", size=0.1, shape=20, alpha = 0.5)+
   labs(x = "Regular O/E",
-       y = "O/E ≈ 0.5")+
+       y = "O/E = ")+ # add respective true O/E for label
   theme_classic()+
   geom_vline(aes(xintercept=mean(diff_reg_true)), # bias
              color="darkred", linetype="solid", size=0.5)+
@@ -659,10 +651,11 @@ sc_1 <- ggplot(df_diff, aes(x=diff_reg_true, y=index)) +
   )+
   theme(text=element_text(family="Times New Roman"))
 
+# scatterplot for natural log method
 sc_2 <- ggplot(df_diff, aes(x=diff_log_true, y=index)) + 
   geom_point(color = "azure4", size=0.1, shape=20, alpha = 0.5)+
   labs(x = "Ln O/E",
-       y = "O/E ≈ 0.5")+
+       y = "O/E = ")+ # add respective true O/E for label
   theme_classic()+
   geom_vline(aes(xintercept=mean(diff_log_true)), # bias
              color="darkred", linetype="solid", size=0.5)+
@@ -677,10 +670,11 @@ sc_2 <- ggplot(df_diff, aes(x=diff_log_true, y=index)) +
   )+
   theme(text=element_text(family="Times New Roman"))
 
+# scatterplot for square root method
 sc_3 <- ggplot(df_diff, aes(x=diff_sqrt_true, y=index)) + 
   geom_point(color = "azure4", size=0.05, shape=20, alpha = 0.5)+
   labs(x = "Square root O/E",
-       y = "O/E ≈ 0.5")+
+       y = "O/E = ")+ # add respective true O/E for label
   theme_classic()+
   geom_vline(aes(xintercept=mean(diff_sqrt_true)), # bias
              color="darkred", linetype="solid", size=0.5)+
@@ -695,7 +689,8 @@ sc_3 <- ggplot(df_diff, aes(x=diff_sqrt_true, y=index)) +
   )+
   theme(text=element_text(family="Times New Roman"))
 
-# size: 600*350
+# combine scatterplots
+# Note: size 600*350
 grid.arrange(sc_1,
              sc_2,
              sc_3,
@@ -704,17 +699,18 @@ grid.arrange(sc_1,
              nrow = 3)
 
 ################################
-# Visualizations: Lollipop plot of coverage rate and its monte carlo standard error
+## 13.3 Visualization of coverage of CI
 ################################
+
 # Note: Darkgreen == Regular, Darkorange == Log, Darkblue == Square root
 
-# df Coverage at alpha = 0.1
+# prepare data for 90-CI
 df_cov_90 = data.frame(
   transformation = c("3", "2", "1"),
   cov_90 = c(unlist(coverage_table[,1])),
   se_90 = c(se_reg_90, se_log_90, se_sqrt_90))
                 
-# plot Coverage at alpha = 0.1
+# plot coverage for 90-CI
 lolli_1 <- ggplot(df_cov_90) +
   geom_point(aes(x=cov_90, y=transformation, colour=transformation), size = 1) +
   geom_vline(xintercept = 0.9, color = "black")+
@@ -725,18 +721,17 @@ lolli_1 <- ggplot(df_cov_90) +
   geom_point( aes(x=cov_90-1.96*se_90, y=transformation, colour=transformation), shape=91, size = 5) +
   geom_point( aes(x=cov_90+1.96*se_90, y=transformation, colour=transformation), shape=93, size = 5) +
   theme_set(theme_bw())+
-  labs(x = "α = 0.1", y = "O/E ≈ 0.5")+
+  labs(x = "α = 0.1", y = "O/E = ")+ # add respective true O/E for label
   theme(legend.position="none", axis.text.y = element_blank())+
   theme(text=element_text(family="Times New Roman"))
-  
 
-# df Coverage at alpha = 0.05
+# prepare data for 95-CI
 df_cov_95 = data.frame(
   transformation = c("3", "2", "1"),
   cov_95 = c(unlist(coverage_table[,2])),
   se_95 = c(se_reg_95, se_log_95, se_sqrt_95))
 
-# plot Coverage at alpha = 0.05
+# plot coverage for 95-CI
 lolli_2 <- ggplot(df_cov_95) +
   geom_point(aes(x=cov_95, y=transformation, colour=transformation), size = 1) +
   geom_vline(xintercept = 0.95, color = "black")+
@@ -751,13 +746,13 @@ lolli_2 <- ggplot(df_cov_95) +
   labs(x = "α = 0.05", y = "")+
   theme(text=element_text(family="Times New Roman"))
 
-# df Coverage at alpha = 0.01
+# prepare data for 99-CI
 df_cov_99 = data.frame(
   transformation = c("3", "2", "1"),
   cov_99 = c(unlist(coverage_table[,3])),
   se_99 = c(se_reg_99, se_log_99, se_sqrt_99))
 
-# plot Coverage at alpha = 0.05
+# plot coverage for 99-CI
 lolli_3 <- ggplot(df_cov_99) +
   geom_point(aes(x=cov_99, y=transformation, colour=transformation), size = 1) +
   geom_vline(xintercept = 0.99, color = "black")+
@@ -772,6 +767,7 @@ lolli_3 <- ggplot(df_cov_99) +
   labs(x = "α = 0.01", y = "")+
   theme(text=element_text(family="Times New Roman"))
 
+# combine lolliplots
 # size: 800*200   
 grid.arrange(lolli_1, lolli_2, lolli_3,
              top = "",
