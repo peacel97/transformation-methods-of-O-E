@@ -82,8 +82,8 @@ for (j in 1:rep_amount){
   #hist(continuous_var_2)
   
   # Create linear combination of predictor variables and intercept
-  lin_combination_train = -3.05 + continuous_var_1 + continuous_var_2
-  lin_combination_test = -4.37 + continuous_var_1 + continuous_var_2
+  lin_combination_train = -3.926 + continuous_var_1 + continuous_var_2
+  lin_combination_test = -4.970 + continuous_var_1 + continuous_var_2
   
   # Probability for response variable to be 1
   # Note: Due to application for logistic regression, use inverse logit function
@@ -147,13 +147,6 @@ for (j in 1:rep_amount){
                        family = binomial
   )
   summary(model_complete)$coef
-  
-  # # Fit model based on complete data
-  # fit_model_complete <- model_complete %>% predict(test_data_complete,
-  #                                                  type = "response"
-  # )
-  # # Predicted probability
-  # summary(fit_model_complete)
   
   ######################################
   ## Calculate true O/E ratio
@@ -595,7 +588,6 @@ plot_1 <- ggplot(df_hist, aes(x = theta_reg)) +
   geom_vline(aes(xintercept=mean_true_oe), 
              color="darkblue", linetype="solid", size=0.5)+
   theme_classic()+
-  ylim(0, 15)+
   labs(x = "Regular O/E",
        y = "O/E ≈ 0.5")+
   theme(
@@ -611,7 +603,6 @@ plot_2 <- ggplot(df_hist, aes(x = theta_ln)) +
   geom_vline(aes(xintercept=mean_true_oe),
              color="darkblue", linetype="solid", size=0.5)+
   theme_classic()+
-  ylim(0, 15)+
   labs(x = "Ln O/E",
        y = "")+
   theme(
@@ -627,7 +618,6 @@ plot_3 <- ggplot(df_hist, aes(x = theta_sqrt)) +
   geom_vline(aes(xintercept=mean_true_oe),
              color="darkblue", linetype="solid", size=0.5)+
   theme_classic()+
-  ylim(0, 15)+
   labs(x = "Square root O/E",
        y = "")+
   theme(
@@ -728,7 +718,7 @@ df_cov_90 = data.frame(
 lolli_1 <- ggplot(df_cov_90) +
   geom_point(aes(x=cov_90, y=transformation, colour=transformation), size = 1) +
   geom_vline(xintercept = 0.9, color = "black")+
-  xlim(0.7, 1)+
+  xlim(0.65, 1)+
   scale_color_manual(name = "",
                      values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
   geom_segment( aes(x=cov_90, xend=0.9, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
@@ -750,7 +740,7 @@ df_cov_95 = data.frame(
 lolli_2 <- ggplot(df_cov_95) +
   geom_point(aes(x=cov_95, y=transformation, colour=transformation), size = 1) +
   geom_vline(xintercept = 0.95, color = "black")+
-  xlim(0.7, 1)+
+  xlim(0.65, 1)+
   scale_color_manual(name = "",
                      values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
   geom_segment( aes(x=cov_95, xend=0.95, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
@@ -771,7 +761,7 @@ df_cov_99 = data.frame(
 lolli_3 <- ggplot(df_cov_99) +
   geom_point(aes(x=cov_99, y=transformation, colour=transformation), size = 1) +
   geom_vline(xintercept = 0.99, color = "black")+
-  xlim(0.7, 1)+
+  xlim(0.65, 1)+
   scale_color_manual(name = "",
                      values = c("1" = "darkblue", "2" = "darkorange", "3" = "darkgreen"))+
   geom_segment( aes(x=cov_99, xend=0.99, y=transformation, yend=transformation, colour=transformation) , size=0.5) +
