@@ -310,8 +310,6 @@ for (j in 1:rep_amount){
   pooled_theta_sqrt_oe = mean(sqrt_theta)
   
   # Function to pool standard errors and receive respective t-values
-  # Formula based on: Epi and Big Data course
-  # Note: Write new with less redundance as some variables already defined
   pooled_se <- function(est, se, n.imp){
     Qbar <- mean(est)
     # within-variance
